@@ -2,9 +2,9 @@
 """
 strategy.py
 - Stage 0: 글로벌 거시 경제 통합 필터 및 시장 상태 진단
-- Stage 1-2: 트렌드 템플릿 8대 조건 검증 & SEPA VCP 통계 분석
+- Stage 1-2: 정밀 마크 미너비니 VCP (다중 파동 수축 + 거래량 고갈 + 피벗 돌파) & SEPA 트렌드 템플릿
 - Stage 3: 펀더멘탈 필터 (ROE, 이익성장률)
-- Stage 4-5: 구글 코랩 원본 정합 100% 자산 배분 및 퀀트 랭킹 엔진
+- Stage 4-5: 자산 배분 및 퀀트 랭킹 엔진 (최적 실전 하이브리드 VCP)
 """
 
 import pandas as pd
@@ -75,7 +75,7 @@ def evaluate_macro(macro_data: dict) -> tuple:
 
 def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series = None) -> dict:
     """
-    Stage 1-2 SEPA & 트렌드 템플릿 8대 조건 및 VCP 지표 산출 (코랩 원본 100% 정합)
+    Stage 1-2 마크 미너비니 정밀 VCP (다중 수축 + 거래량 고갈 + 피벗 돌파) & SEPA 트렌드 템플릿
     """
     if df is None or df.empty or len(df) < 50:
         return get_fallback_data(ticker)
@@ -88,27 +88,31 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
 
         curr_price = float(close_series.iloc[-1])
 
+        df['MA20'] = close_series.rolling(20, min_periods=5).mean()
         df['MA50'] = close_series.rolling(50, min_periods=10).mean()
+        df['MA60'] = close_series.rolling(60, min_periods=10).mean()
         df['MA150'] = close_series.rolling(150, min_periods=20).mean()
         df['MA200'] = close_series.rolling(200, min_periods=30).mean()
 
-        ma50 = float(df['MA50'].iloc[-1]) if pd.notna(df['MA50'].iloc[-1]) else curr_price
-        ma150 = float(df['MA150'].iloc[-1]) if pd.notna(df['MA150'].iloc[-1]) else curr_price
-        ma200 = float(df['MA200'].iloc[-1]) if pd.notna(df['MA200'].iloc[-1]) else curr_price
-        ma200_1m_ago = float(df['MA200'].iloc[-22]) if len(df) >= 22 and pd.notna(df['MA200'].iloc[-22]) else ma200
+        ma20_curr = float(df['MA20'].iloc[-1]) if pd.notna(df['MA20'].iloc[-1]) else curr_price
+        ma50_curr = float(df['MA50'].iloc[-1]) if pd.notna(df['MA50'].iloc[-1]) else curr_price
+        ma60_curr = float(df['MA60'].iloc[-1]) if pd.notna(df['MA60'].iloc[-1]) else curr_price
+        ma150_curr = float(df['MA150'].iloc[-1]) if pd.notna(df['MA150'].iloc[-1]) else curr_price
+        ma200_curr = float(df['MA200'].iloc[-1]) if pd.notna(df['MA200'].iloc[-1]) else curr_price
+        ma200_1m_ago = float(df['MA200'].iloc[-22]) if len(df) >= 22 and pd.notna(df['MA200'].iloc[-22]) else ma200_curr
 
         high_52wk = float(df['High'].tail(min(252, len(df))).max())
         low_52wk = float(df['Low'].tail(min(252, len(df))).min())
 
-        # 트렌드 템플릿 8대 조건
-        c1 = (curr_price > ma150) and (curr_price > ma200)
-        c2 = ma150 > ma200
-        c3 = ma200 >= ma200_1m_ago
-        c4 = (ma50 > ma150) and (ma50 > ma200)
+        # SEPA 8대 트렌드 템플릿
+        c1 = (curr_price > ma150_curr) and (curr_price > ma200_curr)
+        c2 = ma150_curr > ma200_curr
+        c3 = ma200_curr >= ma200_1m_ago
+        c4 = (ma50_curr > ma150_curr) and (ma50_curr > ma200_curr)
         c5 = curr_price >= (low_52wk * 1.25)
         c6 = curr_price >= (high_52wk * 0.75)
 
-        c7 = False
+        c7 = True
         if bm_close is not None and len(bm_close) >= len(df):
             try:
                 rs_series = (df['Close'] / bm_close.reindex(df.index).ffill()).dropna()
@@ -117,24 +121,48 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
                 c7 = bool(rs_curr > rs_6wk_ago)
             except Exception:
                 c7 = True
-        else:
-            c7 = True
 
-        c8 = curr_price > ma50
+        c8 = curr_price > ma50_curr
 
         trend_template_pass = all([c1, c2, c3, c4, c5, c6, c7, c8])
         passed_conditions_count = sum([c1, c2, c3, c4, c5, c6, c7, c8])
 
-        # VCP 패턴 검증 (코랩 원본: 최근 20일 변동폭 < 과거 60일 변동폭 * 0.65)
-        vol_recent = (df['High'].tail(20).max() - df['Low'].tail(20).min()) / curr_price if curr_price > 0 else 0.0
-        vol_past = (df['High'].tail(60).iloc[:-20].max() - df['Low'].tail(60).iloc[:-20].min()) / curr_price if len(df) >= 60 and curr_price > 0 else vol_recent
-        is_vcp_pattern = bool((vol_recent < (vol_past * 0.65)) if vol_past > 0 else False)
+        # ======================================================================
+        # 🌟 [마크 미너비니 정밀 VCP 분석 알고리즘]
+        # ======================================================================
+        highs = df['High'].values
+        lows = df['Low'].values
+        volumes = df['Volume'].values
+        n = len(df)
 
-        df['MA20'] = close_series.rolling(20, min_periods=5).mean()
-        df['MA60'] = close_series.rolling(60, min_periods=10).mean()
-        ma20_curr = float(df['MA20'].iloc[-1]) if pd.notna(df['MA20'].iloc[-1]) else curr_price
-        ma60_curr = float(df['MA60'].iloc[-1]) if pd.notna(df['MA60'].iloc[-1]) else curr_price
+        # 1) 다중 파동 수축 (Multi-Contraction: 1T vs 2T vs 3T)
+        if n >= 40:
+            d1 = (np.max(highs[n-40:n-20]) - np.min(lows[n-40:n-20])) / curr_price
+            d2 = (np.max(highs[n-20:n-5]) - np.min(lows[n-20:n-5])) / curr_price
+            d3 = (np.max(highs[n-5:n]) - np.min(lows[n-5:n])) / curr_price
 
+            is_vcp_contraction = bool((d3 < d2 and d2 <= d1 * 1.15) or (d3 <= 0.05 and d2 < d1))
+        else:
+            is_vcp_contraction = False
+
+        # 2) 거래량 고갈 (Volume Dry-Up)
+        df['Vol_MA50'] = df['Volume'].rolling(50, min_periods=10).mean()
+        df['Vol_MA20'] = df['Volume'].rolling(20, min_periods=5).mean()
+        vol_ma50_curr = float(df['Vol_MA50'].iloc[-1]) if (pd.notna(df['Vol_MA50'].iloc[-1]) and df['Vol_MA50'].iloc[-1] > 0) else 1.0
+        vol_ma20_curr = float(df['Vol_MA20'].iloc[-1]) if (pd.notna(df['Vol_MA20'].iloc[-1]) and df['Vol_MA20'].iloc[-1] > 0) else 1.0
+
+        recent_vol_avg = float(np.mean(volumes[-4:])) if n >= 4 else float(volumes[-1])
+        is_dry_up = bool(recent_vol_avg <= vol_ma50_curr * 0.85)
+
+        # 3) 피벗 포인트 (Pivot Price) 및 상방 돌파
+        pivot_price = float(np.max(highs[-10:-1])) if n >= 11 else curr_price
+        curr_vol = float(volumes[-1])
+        vol_ratio = curr_vol / vol_ma20_curr if vol_ma20_curr > 0 else 1.0
+
+        is_pivot_breakout = bool((curr_price >= pivot_price * 0.995) and (vol_ratio >= 1.20))
+        is_vcp_ready = is_vcp_contraction and is_dry_up
+
+        # 피벗 거리 (20일선과의 이격도 %)
         disp_20 = ((curr_price - ma20_curr) / ma20_curr) * 100 if ma20_curr > 0 else 0.0
 
         # ATR(14)
@@ -144,11 +172,7 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         df['ATR'] = pd.concat([high_low, high_cp, low_cp], axis=1).max(axis=1).rolling(14, min_periods=5).mean()
         curr_atr = float(df['ATR'].iloc[-1]) if pd.notna(df['ATR'].iloc[-1]) else curr_price * 0.02
 
-        # 거래량 배수
-        df['Vol_MA20'] = df['Volume'].rolling(20, min_periods=5).mean()
-        vol_ratio = float(df['Volume'].iloc[-1] / df['Vol_MA20'].iloc[-1]) if (len(df) > 5 and pd.notna(df['Vol_MA20'].iloc[-1]) and df['Vol_MA20'].iloc[-1] > 0) else 1.0
-
-        # 승률 및 켈리 기준 비중
+        # 승률 및 켈리 비중
         df['Returns'] = df['Close'].pct_change()
         wins = df['Returns'][df['Returns'] > 0]
         losses = df['Returns'][df['Returns'] < 0]
@@ -173,12 +197,15 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             '켈리비중': round(float(recommended_weight), 4),
             'ATR': round(float(curr_atr), 2),
             '거래량배수': round(float(vol_ratio), 2),
-            'VCP패턴': is_vcp_pattern,
+            'VCP수축': is_vcp_contraction,
+            '거래량고갈': is_dry_up,
+            '피벗돌파': is_pivot_breakout,
+            'VCP패턴': (is_vcp_contraction and is_dry_up) or is_pivot_breakout,
             'MA20': ma20_curr,
-            'MA50': ma50,
-            'MA150': ma150,
-            'MA200': ma200,
+            'MA50': ma50_curr,
             'MA60': ma60_curr,
+            'MA150': ma150_curr,
+            'MA200': ma200_curr,
             '트렌드_템플릿': "✅ PASS" if trend_template_pass else f"⚠️ {passed_conditions_count}/8",
             '템플릿_통과수': passed_conditions_count,
             '템플릿_PASS여부': trend_template_pass
@@ -188,10 +215,11 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
 
 
 def get_fallback_data(ticker: str) -> dict:
-    price = 73000.0 if ticker == "005930" else (172000.0 if ticker == "000660" else (41000.0 if ticker == "403000" else 150.0))
+    price = 73000.0 if ticker == "005930" else (172000.0 if ticker == "000660" else 150.0)
     return {
         '티커': ticker, '현재가': price, '피벗거리(%)': -2.1, '승률': 0.45, '손익비': 1.1,
-        '켈리비중': 0.04, 'ATR': price * 0.025, '거래량배수': 1.0, 'VCP패턴': False,
+        '켈리비중': 0.04, 'ATR': price * 0.025, '거래량배수': 1.0, 'VCP수축': False,
+        '거래량고갈': False, '피벗돌파': False, 'VCP패턴': False,
         'MA20': price * 1.03, 'MA50': price * 1.04, 'MA150': price * 1.05, 'MA200': price * 1.06,
         'MA60': price * 1.06, '트렌드_템플릿': "⚠️ 6/8", '템플릿_통과수': 6, '템플릿_PASS여부': False
     }
@@ -230,12 +258,11 @@ def calculate_portfolio_allocation(
     exchange_rate: float = 1350
 ) -> pd.DataFrame:
     """
-    Stage 4-5 자산배분 및 퀀트 랭킹 엔진 (코랩 원본 100% 정합)
+    Stage 4-5 자산배분 및 퀀트 랭킹 엔진 (최적 실전 하이브리드 VCP)
     """
     if pipeline_df is None or pipeline_df.empty:
         return None
 
-    # 전략 모드별 임계값 설정
     if "옵션 A" in strategy_mode:
         vol_thresh = 1.2
         disp_thresh = 5.0
@@ -245,18 +272,17 @@ def calculate_portfolio_allocation(
     elif "옵션 C" in strategy_mode:
         vol_thresh = 1.2
         disp_thresh = 7.0
-    else:  # 기존 엄격 모드
+    else:
         vol_thresh = 1.5
         disp_thresh = 5.0
 
     df = pipeline_df.copy()
 
-    # 하락 추세 종목(MA20 < MA60 이면서 주가 < MA20) 사전 배제
+    # 하락 추세 종목 사전 배제
     df = df[~((df['현재가'] < df['MA20']) & (df['MA20'] < df['MA60']))]
     if df.empty:
         df = pipeline_df.copy()
 
-    # 거시 시장 배수 적용
     market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.1)
     df['켈리비중'] = df['켈리비중'].fillna(0.04)
     df['최종비중'] = df['켈리비중'] * market_multiplier
@@ -270,6 +296,8 @@ def calculate_portfolio_allocation(
         ma60 = float(row['MA60']) if pd.notna(row['MA60']) else curr
         disp_20 = float(row['피벗거리(%)']) if pd.notna(row['피벗거리(%)']) else 0.0
         vol_ratio = float(row['거래량배수']) if pd.notna(row['거래량배수']) else 1.0
+        is_breakout = bool(row.get('피벗돌파', False))
+        is_vcp_ready = bool(row.get('VCP수축', False) and row.get('거래량고갈', False))
         is_vcp = bool(row.get('VCP패턴', False))
 
         is_high_volume = vol_ratio >= vol_thresh
@@ -280,20 +308,24 @@ def calculate_portfolio_allocation(
             stage, strategy, priority = "1단계 (회복)", "✅ 돌파 타점 관망 대기", 5
         elif curr >= ma20 and ma20 >= ma60:
             if 0 <= disp_20 <= disp_thresh:
-                if is_high_volume and is_vcp:
-                    stage, strategy, priority = "3단계 (가속)", "🔥 VCP 돌파 (거래량 동반 매수)", 1
+                if is_breakout:
+                    stage, strategy, priority = "3단계 (가속)", "🔥 VCP 피벗 돌파 (최우선 매수)", 1
+                elif is_high_volume and is_vcp:
+                    stage, strategy, priority = "3단계 (가속)", "🔥 VCP 돌파 (거래량 동반 매수)", 2
                 elif is_high_volume:
-                    stage, strategy, priority = "3단계 (가속)", "🔥 불타기 (거래량 동반 매수)", 2
+                    stage, strategy, priority = "3단계 (가속)", "🔥 불타기 (거래량 동반 매수)", 3
+                elif is_vcp_ready:
+                    stage, strategy, priority = "2단계 (수축)", "💎 VCP 수축 완료 (돌파 임박 대기)", 4
                 else:
-                    stage, strategy, priority = "3단계 (가속)", "⚠️ 보유 (거래량 부족 추가 유보)", 4
+                    stage, strategy, priority = "3단계 (가속)", "⚠️ 보유 (거래량 부족 추가 유보)", 5
             elif disp_20 > disp_thresh:
-                stage, strategy, priority = "2단계 (과열)", "🚨 단기 과열 (신규진입 금지)", 6
+                stage, strategy, priority = "2단계 (과열)", "🚨 단기 과열 (신규진입 금지)", 7
             else:
-                stage, strategy, priority = "2단계 (안정)", "📈 강력 보유 (추세 안정)", 3
+                stage, strategy, priority = "2단계 (안정)", "📈 강력 보유 (추세 안정)", 6
         elif curr < ma20 and ma20 >= ma60:
-            stage, strategy, priority = "4단계 (이탈)", "💰 익절 확정 혹은 리스크 축소 분할매도", 7
+            stage, strategy, priority = "4단계 (이탈)", "💰 익절 확정 혹은 리스크 축소 분할매도", 8
         else:
-            stage, strategy, priority = "분석 대기", "관망", 8
+            stage, strategy, priority = "분석 대기", "관망", 9
 
         portfolio_status.append({'현재_단계': stage, '전략제언': strategy})
         sort_priority.append(priority)
@@ -302,7 +334,7 @@ def calculate_portfolio_allocation(
     df = pd.concat([df.reset_index(drop=True), status_df], axis=1)
     df['우선순위'] = sort_priority
 
-    # 코랩 원본 랭킹 정렬: 우선순위(1~99) -> 템플릿 통과 여부(PASS 우선) -> 피벗거리(오름차순)
+    # 코랩 랭킹 정렬: 우선순위(1~99) -> 템플릿 통과 여부(PASS 우선) -> 피벗거리(오름차순)
     df['템플릿_통과'] = df['트렌드_템플릿'].apply(lambda x: 0 if "✅" in str(x) else 1)
     df = df.sort_values(by=['우선순위', '템플릿_통과', '피벗거리(%)'], ascending=[True, True, True])
 
@@ -323,7 +355,6 @@ def calculate_portfolio_allocation(
 
     final_df = pd.DataFrame(final_rows)
 
-    # 매수 수량 및 비중 산출
     qty_list = []
     raw_price_list = []
     for _, row in final_df.iterrows():

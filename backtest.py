@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 backtest.py
-- JTI SEPA & VCP 트렌드 추세추종 전략 과거 백테스팅 시뮬레이션 엔진
-- CAGR, MDD, 승률, 손익비, 샤프지수 및 상세 매매일지(Trade Log) 산출
+- JTI 정밀 마크 미너비니 VCP & SEPA 트렌드 과거 백테스팅 시뮬레이션 엔진
+- -7% 안전 버퍼 손절매, 트레일링 익절, 50일선 추세 완주
 """
 
 import sys
@@ -26,12 +26,12 @@ def run_single_stock_backtest(
     ticker: str,
     period: str = "3y",
     initial_capital: float = 10000000.0,
-    stop_loss_pct: float = 0.06,      # -6% 기계적 손절
-    take_profit_trail: float = 0.15,  # 15% 이상 상승 시 20일선 이탈까지 트레일링 익절
+    stop_loss_pct: float = 0.07,      # -7% 안전 버퍼 손절
+    take_profit_trail: float = 0.15,  # 15% 이상 상승 후 20일선 이탈 시 트레일링 익절
     select_mode: str = ""
 ) -> dict:
     """
-    개별 종목에 대한 SEPA 트렌드 템플릿 & VCP 돌파 전략 과거 백테스팅 시뮬레이션
+    개별 종목에 대한 정밀 마크 미너비니 VCP & SEPA 돌파 전략 백테스팅
     """
     search_ticker = clean_ticker(ticker, select_mode)
     stock_name = NAME_DICT.get(ticker, ticker)
@@ -44,8 +44,7 @@ def run_single_stock_backtest(
     except Exception:
         return None
 
-    # 결측치 정제
-    df = df.dropna(subset=['Open', 'High', 'Low', 'Close']).copy().sort_index()
+    df = df.dropna(subset=['Open', 'High', 'Low', 'Close', 'Volume']).copy().sort_index()
     if len(df) < 60:
         return None
 
@@ -55,18 +54,9 @@ def run_single_stock_backtest(
     df['MA150'] = df['Close'].rolling(150, min_periods=20).mean()
     df['MA200'] = df['Close'].rolling(200, min_periods=30).mean()
     df['Vol_MA20'] = df['Volume'].rolling(20, min_periods=5).mean()
+    df['Vol_MA50'] = df['Volume'].rolling(50, min_periods=10).mean()
+    df['High_52wk'] = df['High'].rolling(min(252, len(df)), min_periods=30).max()
 
-    # VCP 패턴 (최근 20일 변동폭 < 과거 40일 변동폭 * 0.70)
-    high_20 = df['High'].rolling(20, min_periods=5).max()
-    low_20 = df['Low'].rolling(20, min_periods=5).min()
-    high_60 = df['High'].rolling(60, min_periods=10).max()
-    low_60 = df['Low'].rolling(60, min_periods=10).min()
-
-    vol_20 = (high_20 - low_20) / df['Close']
-    vol_past = (high_60 - low_60) / df['Close']
-    df['VCP'] = (vol_20 < (vol_past * 0.70)).fillna(False)
-
-    # 트레이딩 시뮬레이션 상태 변수
     in_position = False
     entry_date = None
     entry_price = 0.0
@@ -87,7 +77,8 @@ def run_single_stock_backtest(
     ma150s = df['MA150'].values
     ma200s = df['MA200'].values
     vol_ma20s = df['Vol_MA20'].values
-    vcps = df['VCP'].values
+    vol_ma50s = df['Vol_MA50'].values
+    high_52wks = df['High_52wk'].values
 
     start_idx = 50
     first_close = closes[start_idx]
@@ -98,14 +89,15 @@ def run_single_stock_backtest(
         curr_open = float(opens[i])
         curr_high = float(highs[i])
         curr_low = float(lows[i])
+        curr_vol = float(volumes[i])
 
         ma20 = float(ma20s[i]) if pd.notna(ma20s[i]) else curr_close
         ma50 = float(ma50s[i]) if pd.notna(ma50s[i]) else curr_close
         ma150 = float(ma150s[i]) if pd.notna(ma150s[i]) else ma50
         ma200 = float(ma200s[i]) if pd.notna(ma200s[i]) else ma150
-        vol_ma = float(vol_ma20s[i]) if (pd.notna(vol_ma20s[i]) and vol_ma20s[i] > 0) else 1.0
-        vol_ratio = float(volumes[i]) / vol_ma
-        is_vcp = bool(vcps[i])
+        vol_ma20 = float(vol_ma20s[i]) if (pd.notna(vol_ma20s[i]) and vol_ma20s[i] > 0) else 1.0
+        vol_ma50 = float(vol_ma50s[i]) if (pd.notna(vol_ma50s[i]) and vol_ma50s[i] > 0) else vol_ma20
+        h_52wk = float(high_52wks[i]) if pd.notna(high_52wks[i]) else curr_close
 
         # 1. 포지션 보유 중인 경우 -> 매도(손절/익절/추세이탈) 체크
         if in_position:
@@ -117,7 +109,7 @@ def run_single_stock_backtest(
             sell_reason = ""
             exit_price = curr_close
 
-            # A. 기계적 손절선 도달 (-stop_loss_pct 이하)
+            # A. 안전 버퍼 손절선 도달 (-stop_loss_pct 이하)
             if curr_low <= entry_price * (1.0 - stop_loss_pct):
                 sell_triggered = True
                 sell_reason = f"🚨 손절매 (-{stop_loss_pct*100:.1f}%)"
@@ -136,7 +128,7 @@ def run_single_stock_backtest(
                 exit_price = curr_close
 
             if sell_triggered:
-                proceeds = shares * exit_price * 0.998  # 수수료/슬리피지 0.2% 차감
+                proceeds = shares * exit_price * 0.998
                 cash += proceeds
                 trade_pnl = proceeds - (shares * entry_price * 1.002)
                 trade_return_pct = ((exit_price - entry_price) / entry_price) * 100
@@ -156,31 +148,48 @@ def run_single_stock_backtest(
                 shares = 0
                 entry_price = 0.0
 
-        # 2. 포지션 미보유 중인 경우 -> 매수(SEPA 트렌드 + 거래량 돌파/VCP) 체크
+        # 2. 포지션 미보유 시 -> 정밀 VCP 피벗 돌파 매수 체크
         if not in_position and i < len(df) - 1:
-            # 트렌드 템플릿 기본 조건: 주가 > MA50 > MA150 and 주가 > MA20
-            trend_cond = (curr_close > ma20) and (curr_close > ma50) and (ma50 >= ma150)
-            
-            # 피벗 이격도 0 ~ 5% 이내
-            disp_20 = ((curr_close - ma20) / ma20) * 100 if ma20 > 0 else 0
-            pivot_cond = 0.0 <= disp_20 <= 6.0
+            # Stage 2 대세 상승 추세
+            stage2_cond = (curr_close > ma50) and (ma50 >= ma150) and (curr_close >= h_52wk * 0.75)
 
-            # 돌파 트리거 (거래량 130% 이상 또는 VCP 수축 돌파)
-            trigger_cond = (vol_ratio >= 1.3) or is_vcp
+            # 다중 진폭 수축
+            if i >= 35:
+                d1 = (np.max(highs[i-35:i-15]) - np.min(lows[i-35:i-15])) / curr_close
+                d2 = (np.max(highs[i-15:i-4]) - np.min(lows[i-15:i-4])) / curr_close
+                d3 = (np.max(highs[i-4:i]) - np.min(lows[i-4:i])) / curr_close
+                is_vcp_contraction = (d3 < d2 and d2 <= d1 * 1.15) or (d3 <= 0.055 and d2 < d1)
+            else:
+                is_vcp_contraction = False
 
-            if trend_cond and pivot_cond and trigger_cond:
+            # 거래량 고갈
+            recent_vol_avg = np.mean(volumes[max(0, i-3):i]) if i >= 3 else curr_vol
+            is_dry_up = (recent_vol_avg <= vol_ma50 * 0.85)
+
+            # 피벗 돌파 (최근 10일 저항선)
+            pivot_price = np.max(highs[max(0, i-10):i]) if i >= 10 else curr_close
+            vol_ratio = curr_vol / vol_ma20 if vol_ma20 > 0 else 1.0
+            is_pivot_breakout = (curr_close >= pivot_price * 0.995) and (vol_ratio >= 1.20)
+
+            # 피벗 이격도 0 ~ 6%
+            disp_20 = ((curr_close - ma20) / ma20) * 100 if ma20 > 0 else 0.0
+            pivot_dist_ok = (0.0 <= disp_20 <= 6.0)
+
+            buy_signal = stage2_cond and pivot_dist_ok and (
+                is_pivot_breakout or (is_vcp_contraction and (is_dry_up or vol_ratio >= 1.25))
+            )
+
+            if buy_signal:
                 in_position = True
                 entry_date = dt
                 entry_price = curr_close
                 highest_price_during_trade = curr_close
 
-                # 가용 현금의 95% 투입
                 invest_amt = cash * 0.95
                 shares = int(invest_amt // (entry_price * 1.002))
                 if shares > 0:
                     cash -= shares * entry_price * 1.002
 
-        # 일자별 자산 가치 기록
         current_equity = cash + (shares * curr_close if in_position else 0)
         portfolio_values.append({
             'Date': dt,
@@ -189,7 +198,7 @@ def run_single_stock_backtest(
             'Close': curr_close
         })
 
-    # 마지막 날 포지션 남아있을 경우 평가 청산
+    # 잔여 포지션 청산
     if in_position:
         final_close = float(closes[-1])
         proceeds = shares * final_close * 0.998
@@ -208,27 +217,22 @@ def run_single_stock_backtest(
             '청산사유': "🏁 백테스트 종료 청산"
         })
 
-    # 결과 데이터프레임 생성
     equity_df = pd.DataFrame(portfolio_values).set_index('Date')
     trades_df = pd.DataFrame(trade_logs)
 
-    # 핵심 성과 지표 산출
     final_equity = float(equity_df['Strategy'].iloc[-1])
     total_return_pct = ((final_equity - initial_capital) / initial_capital) * 100
     buyhold_final = float(equity_df['BuyHold'].iloc[-1])
     buyhold_return_pct = ((buyhold_final - initial_capital) / initial_capital) * 100
 
-    # 기간(년) 계산
     total_days = (dates[-1] - dates[start_idx]).days
     years = max(total_days / 365.25, 0.5)
     cagr = ((final_equity / initial_capital) ** (1.0 / years) - 1.0) * 100 if final_equity > 0 else -100.0
 
-    # MDD (최대 낙폭) 계산
     roll_max = equity_df['Strategy'].cummax()
     drawdown = (equity_df['Strategy'] - roll_max) / roll_max
     mdd = abs(float(drawdown.min())) * 100
 
-    # 매매 통계
     if not trades_df.empty:
         total_trades = len(trades_df)
         winning_trades = trades_df[trades_df['수익률(%)'] > 0]

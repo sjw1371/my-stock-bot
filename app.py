@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 app.py
-- JTI 전수조사형 퀀트 투자 시스템 & 과거 백테스팅 시뮬레이터 (코랩 100% 정합 & 초고속 배치 엔진)
+- JTI 전수조사형 퀀트 투자 시스템 & 과거 백테스팅 시뮬레이터
+- 정밀 마크 미너비니 VCP 엔진 & 실전 하이브리드 리스크 관리 탑재
 """
 
 import sys
 import os
 
-# Windows 콘솔 및 Streamlit 환경 UTF-8 인코딩 안전화
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -45,13 +45,12 @@ from backtest import run_single_stock_backtest
 # 🌟 페이지 기본 설정 및 스타일링
 # ==============================================================================
 st.set_page_config(
-    page_title="JTI 퀀트 주식 & 백테스팅 시스템",
+    page_title="JTI 퀀트 주식 & 정밀 VCP 시스템",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for polished UI
 st.markdown("""
 <style>
     .main-header {
@@ -95,7 +94,7 @@ with st.sidebar:
     if select_mode == "6. 직접입력":
         raw_input_tickers = st.text_area(
             "✍️ 티커 직접 입력 (쉼표로 구분)",
-            value="RJF, SCHW, CRWD, ADSK, NVDA, MSFT, AAPL, 005930, 000660"
+            value="000660, NVDA, CRWD, MSFT, AAPL, 005930"
         )
 
     st.subheader("🎯 2. 매수 타점 전략")
@@ -116,22 +115,16 @@ with st.sidebar:
 
 
 # ==============================================================================
-# 📊 데이터 로딩 및 분석 파이프라인 캐싱 (초고속 배치 최적화)
+# 📊 데이터 로딩 및 분석 파이프라인 캐싱
 # ==============================================================================
 @st.cache_data(ttl=1800, show_spinner=False)
 def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, exchange_rate):
-    # 1. 유니버스 수집
     tickers = fetch_universe_tickers(select_mode, raw_input_tickers)
-    
-    # 2. 매크로 데이터
     macro_data = fetch_macro_data()
     market_score, market_status, vix, detail_logs, indices_summary = evaluate_macro(macro_data)
-    
-    # 3. 벤치마크 및 전 종목 배치 시세 수집
     bm_close = fetch_benchmark_close()
     stock_dfs = fetch_all_stock_history_batch(tickers, select_mode=select_mode, period='1y')
 
-    # 4. SEPA 트렌드 분석
     pipeline_records = []
     for ticker in tickers:
         df = stock_dfs.get(ticker, pd.DataFrame())
@@ -140,7 +133,6 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 
     pipeline_df = pd.DataFrame(pipeline_records)
 
-    # 5. 펀더멘탈 필터
     fund_records = []
     for ticker in pipeline_df['티커']:
         f_data = fetch_fundamental_data(ticker, select_mode=select_mode)
@@ -150,7 +142,6 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
     fund_df = pd.DataFrame(fund_records)
     pipeline_df = pd.merge(pipeline_df, fund_df[['티커', '종목명', '섹터', 'ROE(%)', '이익성장(%)', '등급']], on='티커')
 
-    # 6. 자산 배분 및 코랩 정합 랭킹
     final_df = calculate_portfolio_allocation(
         pipeline_df=pipeline_df,
         market_status=market_status,
@@ -175,8 +166,8 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 # ==============================================================================
 # 🖥️ 메인 탭 레이아웃 구성
 # ==============================================================================
-st.markdown('<div class="main-header">📈 JTI 전수조사형 퀀트 & 백테스팅 시스템</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="sub-header">글로벌 거시경제 분석 · 트렌드 템플릿(SEPA) · VCP 패턴 · 동적 켈리 자산 배분 & 과거 검증 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">📈 JTI 정밀 VCP 퀀트 & 백테스팅 시스템</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="sub-header">마크 미너비니 VCP 엔진 · 트렌드 템플릿(SEPA) · 동적 켈리 자산 배분 & 백테스팅 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
 
 tab_realtime, tab_backtest = st.tabs(["📡 실시간 퀀트 대시보드", "📊 과거 백테스팅 검증 (10년 시뮬레이션)"])
 
@@ -184,9 +175,8 @@ tab_realtime, tab_backtest = st.tabs(["📡 실시간 퀀트 대시보드", "�
 # 탭 1: 실시간 퀀트 대시보드
 # ==============================================================================
 with tab_realtime:
-    # 최초 실행 또는 버튼 클릭 시
     if 'results' not in st.session_state or run_btn:
-        with st.spinner(f"🌐 [{select_mode}] 전 종목 실시간 시세 및 퀀트 파이프라인 초고속 분석 중..."):
+        with st.spinner(f"🌐 [{select_mode}] 전 종목 실시간 시세 및 정밀 VCP 분석 중..."):
             st.session_state['results'] = run_quant_analysis(
                 select_mode, raw_input_tickers, strategy_mode, capital, exchange_rate
             )
@@ -194,11 +184,8 @@ with tab_realtime:
     results = st.session_state.get('results')
 
     if results:
-        # --------------------------------------------------------------------------
-        # 📡 Stage 0 : 거시 경제 신호등 & 4대 지표 현황
-        # --------------------------------------------------------------------------
+        # 거시 신호등
         st.subheader("📡 Stage 0: 글로벌 거시 경제 통합 필터")
-        
         col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1, 1, 1])
 
         with col1:
@@ -236,7 +223,6 @@ with tab_realtime:
                 delta="포트폴리오 구성"
             )
 
-        # 4대 지수 이평선 세부 상태 아코디언
         with st.expander("🔍 4대 글로벌 벤치마크 지수 상세 정배열 추세 스캔 성적표", expanded=False):
             idx_cols = st.columns(4)
             for i, (idx_name, idx_info) in enumerate(results['indices_summary'].items()):
@@ -249,9 +235,7 @@ with tab_realtime:
 
         st.markdown("---")
 
-        # --------------------------------------------------------------------------
-        # 🏆 Stage 4-5 : AI 퀀트 포트폴리오 결과
-        # --------------------------------------------------------------------------
+        # 추천 포트폴리오
         st.subheader(f"🏆 AI 퀀트 추천 포트폴리오 [선택 시장: {select_mode} | 매수 전략: {strategy_mode}]")
 
         final_df = results['final_df']
@@ -285,9 +269,7 @@ with tab_realtime:
                 }
             )
 
-            # ----------------------------------------------------------------------
-            # 📊 자산 배분 및 섹터 비중 차트
-            # ----------------------------------------------------------------------
+            # 자산 배분 차트
             st.markdown("### 📊 포트폴리오 자산 및 섹터 배분 현황")
             chart_col1, chart_col2 = st.columns(2)
 
@@ -323,9 +305,7 @@ with tab_realtime:
                 )
                 st.plotly_chart(fig_bar, use_container_width=True)
 
-            # ----------------------------------------------------------------------
-            # 🔍 종목별 심층 기술적/펀더멘탈 분석 뷰어
-            # ----------------------------------------------------------------------
+            # 개별 종목 심층 뷰어
             st.markdown("---")
             st.subheader("🔍 개별 종목 심층 캔들스틱 & 지표 뷰어")
 
@@ -393,10 +373,11 @@ with tab_realtime:
                         st.markdown("**🎯 매매 신호**")
                         st.info(f"{stock_row['전략제언']}")
                     with card_col2:
-                        st.markdown("**📐 기술적 지표**")
+                        st.markdown("**📐 미너비니 VCP 지표**")
+                        st.write(f"- 다중 파동 수축: **{'완료 ✅' if stock_row.get('VCP수축') else '진행 중'}**")
+                        st.write(f"- 거래량 고갈: **{'고갈 완료 💧' if stock_row.get('거래량고갈') else '일반'}**")
+                        st.write(f"- 피벗 돌파: **{'상방 돌파 🚀' if stock_row.get('피벗돌파') else '대기'}**")
                         st.write(f"- 피벗 거리: **{stock_row['피벗거리(%)']}%**")
-                        st.write(f"- 거래량 배수: **{stock_row['거래량배수']}배**")
-                        st.write(f"- VCP 패턴: **{'감지됨 🔥' if stock_row['VCP패턴'] else '미감지'}**")
                     with card_col3:
                         st.markdown("**💎 펀더멘탈 지표**")
                         st.write(f"- 섹터: **{stock_row['섹터']}**")
@@ -419,14 +400,14 @@ with tab_realtime:
 # 탭 2: 과거 백테스팅 시뮬레이션
 # ==============================================================================
 with tab_backtest:
-    st.subheader("📊 SEPA 트렌드 & VCP 전략 과거 백테스팅 시뮬레이터")
-    st.markdown("과거 실제 시세 데이터를 바탕으로 **손절매(-6%) & 트레일링 익절 & SEPA 돌파 매수** 전략의 실제 수익률과 리스크를 정밀 검증합니다.")
+    st.subheader("📊 정밀 VCP & SEPA 전략 과거 백테스팅 시뮬레이터")
+    st.markdown("과거 실제 시세 데이터를 바탕으로 **안전 버퍼 손절매(-7%) & 트레일링 익절 & 미너비니 VCP 피벗 돌파 매수** 전략의 실제 수익률을 정밀 검증합니다.")
 
     bt_col1, bt_col2, bt_col3, bt_col4 = st.columns(4)
     with bt_col1:
         bt_ticker = st.selectbox(
             "백테스트 종목 선택",
-            options=["RJF", "SCHW", "CRWD", "ADSK", "NVDA", "AAPL", "MSFT", "TSLA", "005930", "000660", "직접입력"],
+            options=["000660", "NVDA", "CRWD", "MSFT", "AAPL", "005930", "직접입력"],
             index=0
         )
         if bt_ticker == "직접입력":
@@ -436,7 +417,7 @@ with tab_backtest:
         bt_period = st.selectbox("백테스트 기간", ["1y", "2y", "3y", "5y", "10y"], index=2)
 
     with bt_col3:
-        bt_stop_loss = st.selectbox("손절매 기준 (Stop-Loss)", [-0.04, -0.05, -0.06, -0.07, -0.08, -0.10], index=2, format_func=lambda x: f"{x*100:.0f}%")
+        bt_stop_loss = st.selectbox("손절매 기준 (Stop-Loss)", [-0.05, -0.06, -0.07, -0.08, -0.10], index=2, format_func=lambda x: f"{x*100:.0f}%")
 
     with bt_col4:
         bt_capital = st.number_input("시뮬레이션 초기 자산 (원)", min_value=1000000, max_value=1000000000, value=10000000, step=1000000)
@@ -444,7 +425,7 @@ with tab_backtest:
     bt_run_btn = st.button("🚀 백테스트 실행하기", type="primary", use_container_width=True)
 
     if bt_run_btn or 'bt_result' not in st.session_state:
-        with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 과거 백테스트 시뮬레이션 계산 중..."):
+        with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 VCP 백테스트 시뮬레이션 계산 중..."):
             st.session_state['bt_result'] = run_single_stock_backtest(
                 ticker=bt_ticker,
                 period=bt_period,
@@ -455,7 +436,6 @@ with tab_backtest:
     bt_res = st.session_state.get('bt_result')
 
     if bt_res:
-        # 성과 요약 메트릭
         st.markdown(f"### 🏆 백테스트 성과 분석 성적표: **{bt_res['stock_name']} ({bt_res['ticker']})** [기간: {bt_res['period']}]")
         
         m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
@@ -489,7 +469,6 @@ with tab_backtest:
                 value=f"{bt_res['payoff_ratio']:.2f} : 1"
             )
 
-        # 📈 누적 자산 곡선 (Equity Curve) 차트
         st.markdown("### 📈 누적 자산 가치 곡선 (Equity Curve vs 단순보유)")
         eq_df = bt_res['equity_df']
 
@@ -517,7 +496,6 @@ with tab_backtest:
         )
         st.plotly_chart(fig_eq, use_container_width=True)
 
-        # 📉 드로다운(Drawdown) 차트
         st.markdown("### 🛡️ 계좌 낙폭 (Drawdown) 추이")
         fig_dd = go.Figure()
         fig_dd.add_trace(go.Scatter(
@@ -537,7 +515,6 @@ with tab_backtest:
         )
         st.plotly_chart(fig_dd, use_container_width=True)
 
-        # 📋 상세 매매 일지(Trade Log)
         st.markdown("### 📋 개별 매매 상세 일지 (Trade Log)")
         trades_df = bt_res['trades_df']
         if not trades_df.empty:
