@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
 backtest.py
-- JTI 정밀 마크 미너비니 VCP & SEPA 트렌드 과거 백테스팅 시뮬레이션 엔진
-- -7% 안전 버퍼 손절매, 트레일링 익절, 50일선 추세 완주
+- JTI 정밀 마크 미너비니 VCP & SEPA 트렌드 템플릿 과거 백테스팅 시뮬레이션 엔진
+- 피벗 초입 돌파(+0~2.5%), 20일선 눌림목 지지, -7% 안전 버퍼 손절, 트레일링 익절
 """
 
 import sys
@@ -11,7 +11,6 @@ import numpy as np
 import yfinance as yf
 from datetime import datetime
 
-# Windows UTF-8 지원
 if sys.platform == 'win32':
     try:
         sys.stdout.reconfigure(encoding='utf-8', errors='replace')
@@ -30,9 +29,6 @@ def run_single_stock_backtest(
     take_profit_trail: float = 0.15,  # 15% 이상 상승 후 20일선 이탈 시 트레일링 익절
     select_mode: str = ""
 ) -> dict:
-    """
-    개별 종목에 대한 정밀 마크 미너비니 VCP & SEPA 돌파 전략 백테스팅
-    """
     search_ticker = clean_ticker(ticker, select_mode)
     stock_name = NAME_DICT.get(ticker, ticker)
 
@@ -56,6 +52,7 @@ def run_single_stock_backtest(
     df['Vol_MA20'] = df['Volume'].rolling(20, min_periods=5).mean()
     df['Vol_MA50'] = df['Volume'].rolling(50, min_periods=10).mean()
     df['High_52wk'] = df['High'].rolling(min(252, len(df)), min_periods=30).max()
+    df['Low_52wk'] = df['Low'].rolling(min(252, len(df)), min_periods=30).min()
 
     in_position = False
     entry_date = None
@@ -79,6 +76,7 @@ def run_single_stock_backtest(
     vol_ma20s = df['Vol_MA20'].values
     vol_ma50s = df['Vol_MA50'].values
     high_52wks = df['High_52wk'].values
+    low_52wks = df['Low_52wk'].values
 
     start_idx = 50
     first_close = closes[start_idx]
@@ -98,6 +96,7 @@ def run_single_stock_backtest(
         vol_ma20 = float(vol_ma20s[i]) if (pd.notna(vol_ma20s[i]) and vol_ma20s[i] > 0) else 1.0
         vol_ma50 = float(vol_ma50s[i]) if (pd.notna(vol_ma50s[i]) and vol_ma50s[i] > 0) else vol_ma20
         h_52wk = float(high_52wks[i]) if pd.notna(high_52wks[i]) else curr_close
+        l_52wk = float(low_52wks[i]) if pd.notna(low_52wks[i]) else curr_close
 
         # 1. 포지션 보유 중인 경우 -> 매도(손절/익절/추세이탈) 체크
         if in_position:
@@ -109,7 +108,7 @@ def run_single_stock_backtest(
             sell_reason = ""
             exit_price = curr_close
 
-            # A. 안전 버퍼 손절선 도달 (-stop_loss_pct 이하)
+            # A. 안전 버퍼 손절선 도달 (-stop_loss_pct)
             if curr_low <= entry_price * (1.0 - stop_loss_pct):
                 sell_triggered = True
                 sell_reason = f"🚨 손절매 (-{stop_loss_pct*100:.1f}%)"
@@ -148,47 +147,36 @@ def run_single_stock_backtest(
                 shares = 0
                 entry_price = 0.0
 
-        # 2. 포지션 미보유 시 -> 정밀 VCP 피벗 돌파 매수 체크
+        # 2. 포지션 미보유 시 -> 트렌드 템플릿 + 피벗 초입(+0~2.5%) & 20일선 거래량 마른 눌림목 매수
         if not in_position and i < len(df) - 1:
-            # Stage 2 대세 상승 추세
-            stage2_cond = (curr_close > ma50) and (ma50 >= ma150) and (curr_close >= h_52wk * 0.75)
+            # SEPA 템플릿 핵심 조건
+            trend_template_pass = (curr_close > ma150) and (curr_close > ma200) and (ma150 >= ma200) and (ma50 >= ma150) and (curr_close >= l_52wk * 1.25) and (curr_close >= h_52wk * 0.75) and (curr_close > ma50)
 
-            # 다중 진폭 수축
-            if i >= 35:
-                d1 = (np.max(highs[i-35:i-15]) - np.min(lows[i-35:i-15])) / curr_close
-                d2 = (np.max(highs[i-15:i-4]) - np.min(lows[i-15:i-4])) / curr_close
-                d3 = (np.max(highs[i-4:i]) - np.min(lows[i-4:i])) / curr_close
-                is_vcp_contraction = (d3 < d2 and d2 <= d1 * 1.15) or (d3 <= 0.055 and d2 < d1)
-            else:
-                is_vcp_contraction = False
+            if trend_template_pass:
+                # A. 피벗 포인트 저항선
+                pivot_price = np.max(highs[max(0, i-10):i]) if i >= 10 else curr_close
+                vol_ratio = curr_vol / vol_ma20 if vol_ma20 > 0 else 1.0
+                pivot_dist_pct = ((curr_close - pivot_price) / pivot_price) * 100 if pivot_price > 0 else 0.0
 
-            # 거래량 고갈
-            recent_vol_avg = np.mean(volumes[max(0, i-3):i]) if i >= 3 else curr_vol
-            is_dry_up = (recent_vol_avg <= vol_ma50 * 0.85)
+                # 피벗 초입 돌파 (+0.0% ~ +2.5% 이내)
+                is_pivot_entry = (0.0 <= pivot_dist_pct <= 2.5) and (vol_ratio >= 1.20)
 
-            # 피벗 돌파 (최근 10일 저항선)
-            pivot_price = np.max(highs[max(0, i-10):i]) if i >= 10 else curr_close
-            vol_ratio = curr_vol / vol_ma20 if vol_ma20 > 0 else 1.0
-            is_pivot_breakout = (curr_close >= pivot_price * 0.995) and (vol_ratio >= 1.20)
+                # B. 20일선 거래량 마른 눌림목 지지 (First Pullback)
+                disp_20 = ((curr_close - ma20) / ma20) * 100 if ma20 > 0 else 0.0
+                recent_vol_avg = np.mean(volumes[max(0, i-3):i]) if i >= 3 else curr_vol
+                is_dry_up = (recent_vol_avg <= vol_ma50 * 0.85)
+                is_pullback_entry = (-1.0 <= disp_20 <= 2.0) and is_dry_up and (curr_close >= ma20 * 0.99)
 
-            # 피벗 이격도 0 ~ 6%
-            disp_20 = ((curr_close - ma20) / ma20) * 100 if ma20 > 0 else 0.0
-            pivot_dist_ok = (0.0 <= disp_20 <= 6.0)
+                if is_pivot_entry or is_pullback_entry:
+                    in_position = True
+                    entry_date = dt
+                    entry_price = curr_close
+                    highest_price_during_trade = curr_close
 
-            buy_signal = stage2_cond and pivot_dist_ok and (
-                is_pivot_breakout or (is_vcp_contraction and (is_dry_up or vol_ratio >= 1.25))
-            )
-
-            if buy_signal:
-                in_position = True
-                entry_date = dt
-                entry_price = curr_close
-                highest_price_during_trade = curr_close
-
-                invest_amt = cash * 0.95
-                shares = int(invest_amt // (entry_price * 1.002))
-                if shares > 0:
-                    cash -= shares * entry_price * 1.002
+                    invest_amt = cash * 0.95
+                    shares = int(invest_amt // (entry_price * 1.002))
+                    if shares > 0:
+                        cash -= shares * entry_price * 1.002
 
         current_equity = cash + (shares * curr_close if in_position else 0)
         portfolio_values.append({

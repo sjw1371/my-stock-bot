@@ -2,7 +2,7 @@
 """
 app.py
 - JTI 전수조사형 퀀트 투자 시스템 & 과거 백테스팅 시뮬레이터
-- 정밀 마크 미너비니 VCP 엔진 & 실전 하이브리드 리스크 관리 탑재
+- 진짜 마크 미너비니 SEPA 트렌드 템플릿 & VCP + 추격 매수 차단 캡 + 눌림목 지지 완성판
 """
 
 import sys
@@ -45,7 +45,7 @@ from backtest import run_single_stock_backtest
 # 🌟 페이지 기본 설정 및 스타일링
 # ==============================================================================
 st.set_page_config(
-    page_title="JTI 퀀트 주식 & 정밀 VCP 시스템",
+    page_title="JTI 마크 미너비니 퀀트 시스템",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -166,8 +166,8 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 # ==============================================================================
 # 🖥️ 메인 탭 레이아웃 구성
 # ==============================================================================
-st.markdown('<div class="main-header">📈 JTI 정밀 VCP 퀀트 & 백테스팅 시스템</div>', unsafe_allow_html=True)
-st.markdown(f'<div class="sub-header">마크 미너비니 VCP 엔진 · 트렌드 템플릿(SEPA) · 동적 켈리 자산 배분 & 백테스팅 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-header">📈 JTI 마크 미너비니 퀀트 시스템</div>', unsafe_allow_html=True)
+st.markdown(f'<div class="sub-header">SEPA 트렌드 템플릿(8대 조건) · 피벗 초입(+0~2.5%) & 20일선 눌림목 지지 · 추격 매수 차단 캡 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
 
 tab_realtime, tab_backtest = st.tabs(["📡 실시간 퀀트 대시보드", "📊 과거 백테스팅 검증 (10년 시뮬레이션)"])
 
@@ -176,7 +176,7 @@ tab_realtime, tab_backtest = st.tabs(["📡 실시간 퀀트 대시보드", "�
 # ==============================================================================
 with tab_realtime:
     if 'results' not in st.session_state or run_btn:
-        with st.spinner(f"🌐 [{select_mode}] 전 종목 실시간 시세 및 정밀 VCP 분석 중..."):
+        with st.spinner(f"🌐 [{select_mode}] 전 종목 실시간 시세 및 마크 미너비니 정밀 분석 중..."):
             st.session_state['results'] = run_quant_analysis(
                 select_mode, raw_input_tickers, strategy_mode, capital, exchange_rate
             )
@@ -184,6 +184,12 @@ with tab_realtime:
     results = st.session_state.get('results')
 
     if results:
+        # 시장 하락장 셧다운 알림 배너
+        if "🔴" in results['market_status']:
+            st.error("🚨 **[시장 하락장 자동 셧다운 발동]** 글로벌 벤치마크 지수가 20일/50일선 아래로 꺾인 위험 구간입니다. 마크 미너비니 원칙에 따라 **신규 매수를 전면 중단하고 100% 현금을 보존**하십시오.")
+        elif "🟡" in results['market_status']:
+            st.warning("⚠️ **[시장 주의 관망 구간]** 지수 단기 추세가 흔들리고 있습니다. 투자 비중을 50%로 자동 축소하고 엄격한 손익비 타점에서만 접근합니다.")
+
         # 거시 신호등
         st.subheader("📡 Stage 0: 글로벌 거시 경제 통합 필터")
         col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1, 1, 1])
@@ -192,7 +198,7 @@ with tab_realtime:
             st.metric(
                 label="🌐 글로벌 시장 상태",
                 value=results['market_status'],
-                delta="정상 가동" if "🟢" in results['market_status'] else ("주의 관망" if "🟡" in results['market_status'] else "보수적 운용")
+                delta="정상 가동" if "🟢" in results['market_status'] else ("주의 관망" if "🟡" in results['market_status'] else "매수 셧다운")
             )
         with col2:
             st.metric(
@@ -307,7 +313,7 @@ with tab_realtime:
 
             # 개별 종목 심층 뷰어
             st.markdown("---")
-            st.subheader("🔍 개별 종목 심층 캔들스틱 & 지표 뷰어")
+            st.subheader("🔍 개별 종목 심층 캔들스틱 & 미너비니 지표 뷰어")
 
             selected_ticker = st.selectbox(
                 "분석할 종목을 선택하세요",
@@ -373,10 +379,10 @@ with tab_realtime:
                         st.markdown("**🎯 매매 신호**")
                         st.info(f"{stock_row['전략제언']}")
                     with card_col2:
-                        st.markdown("**📐 미너비니 VCP 지표**")
-                        st.write(f"- 다중 파동 수축: **{'완료 ✅' if stock_row.get('VCP수축') else '진행 중'}**")
-                        st.write(f"- 거래량 고갈: **{'고갈 완료 💧' if stock_row.get('거래량고갈') else '일반'}**")
-                        st.write(f"- 피벗 돌파: **{'상방 돌파 🚀' if stock_row.get('피벗돌파') else '대기'}**")
+                        st.markdown("**📐 미너비니 타점 지표**")
+                        st.write(f"- 피벗 초입 돌파: **{'초입 돌파 🚀' if stock_row.get('피벗초입돌파') else '대기'}**")
+                        st.write(f"- 20일선 눌림목: **{'눌림목 지지 💎' if stock_row.get('눌림목지지') else '일반'}**")
+                        st.write(f"- 단기 과열(상투): **{'과열 🚨 (매수금지)' if stock_row.get('단기과열여부') else '적정가 ✅'}**")
                         st.write(f"- 피벗 거리: **{stock_row['피벗거리(%)']}%**")
                     with card_col3:
                         st.markdown("**💎 펀더멘탈 지표**")
@@ -400,8 +406,8 @@ with tab_realtime:
 # 탭 2: 과거 백테스팅 시뮬레이션
 # ==============================================================================
 with tab_backtest:
-    st.subheader("📊 정밀 VCP & SEPA 전략 과거 백테스팅 시뮬레이터")
-    st.markdown("과거 실제 시세 데이터를 바탕으로 **안전 버퍼 손절매(-7%) & 트레일링 익절 & 미너비니 VCP 피벗 돌파 매수** 전략의 실제 수익률을 정밀 검증합니다.")
+    st.subheader("📊 마크 미너비니 SEPA & 정밀 VCP 백테스팅 시뮬레이터")
+    st.markdown("과거 실제 시세 데이터를 바탕으로 **안전 버퍼 손절매(-7%) & 피벗 초입 돌파(+0~2.5%) & 20일선 거래량 마른 눌림목 지지 매수** 전략의 실제 수익률을 정밀 검증합니다.")
 
     bt_col1, bt_col2, bt_col3, bt_col4 = st.columns(4)
     with bt_col1:
@@ -425,7 +431,7 @@ with tab_backtest:
     bt_run_btn = st.button("🚀 백테스트 실행하기", type="primary", use_container_width=True)
 
     if bt_run_btn or 'bt_result' not in st.session_state:
-        with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 VCP 백테스트 시뮬레이션 계산 중..."):
+        with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 SEPA 백테스트 시뮬레이션 계산 중..."):
             st.session_state['bt_result'] = run_single_stock_backtest(
                 ticker=bt_ticker,
                 period=bt_period,

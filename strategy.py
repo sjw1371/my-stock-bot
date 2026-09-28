@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 strategy.py
-- Stage 0: 글로벌 거시 경제 통합 필터 및 시장 상태 진단
-- Stage 1-2: 정밀 마크 미너비니 VCP (다중 파동 수축 + 거래량 고갈 + 피벗 돌파) & SEPA 트렌드 템플릿
-- Stage 3: 펀더멘탈 필터 (ROE, 이익성장률)
-- Stage 4-5: 자산 배분 및 퀀트 랭킹 엔진 (최적 실전 하이브리드 VCP)
+- Stage 0: 글로벌 거시 경제 통합 필터 및 시장 하락장 자동 셧다운(Hard Stop)
+- Stage 1-2: SEPA 트렌드 템플릿 8대 조건 필수 검증 & 마크 미너비니 VCP + 추격 매수 차단 캡 + 눌림목 지지
+- Stage 3: 계량 재무학 펀더멘탈 하한선 필터
+- Stage 4-5: 자산 배분 및 퀀트 랭킹 엔진 (원전 완벽 구현 실전형 모델)
 """
 
 import pandas as pd
@@ -13,10 +13,10 @@ import numpy as np
 
 def evaluate_macro(macro_data: dict) -> tuple:
     """
-    Stage 0 거시 경제 분석:
+    Stage 0 거시 경제 분석 & 시장 상태 판정:
     - VIX 수준 점검
-    - 4대 주요 지수 50일/200일 이평선 정배열 스코어링 (각 0~3점)
-    - 종합 시장 점수(0.0 ~ 3.0) 및 상태(🟢 ON / 🟡 CAUTION / 🔴 OFF) 산출
+    - 4대 주요 지수 50일/200일 이평선 정배열 및 20일선 추세 점검
+    - 시장 상태 (🟢 ON / 🟡 CAUTION / 🔴 OFF - 신규 매수 셧다운)
     """
     vix = macro_data.get('vix', 21.51)
     if pd.isna(vix) or vix <= 0:
@@ -33,6 +33,7 @@ def evaluate_macro(macro_data: dict) -> tuple:
             try:
                 close_series = hist['Close'].dropna()
                 curr = float(close_series.iloc[-1])
+                ma20 = float(close_series.rolling(20, min_periods=5).mean().iloc[-1])
                 ma50 = float(close_series.rolling(50, min_periods=10).mean().iloc[-1])
                 ma200 = float(close_series.rolling(200, min_periods=20).mean().iloc[-1])
 
@@ -42,11 +43,19 @@ def evaluate_macro(macro_data: dict) -> tuple:
                 idx_score = s1 + s2 + s3
                 scores.append(idx_score)
 
-                status_text = "🟢 정배열 우상향" if idx_score == 3 else ("🟡 단기 추세 훼손" if idx_score == 2 else "🚨 중장기 하락세")
+                is_short_down = curr < ma20
+                if idx_score == 3 and not is_short_down:
+                    status_text = "🟢 정배열 우상향 (매수 최적)"
+                elif idx_score >= 2:
+                    status_text = "🟡 단기 추세 훼손 (주의 관망)"
+                else:
+                    status_text = "🚨 중장기 하락세 (매수 금지)"
+
                 indices_summary[name] = {
                     'score': idx_score,
                     'status': status_text,
                     'curr': curr,
+                    'ma20': ma20,
                     'ma50': ma50,
                     'ma200': ma200,
                     's1': s1, 's2': s2, 's3': s3
@@ -59,7 +68,7 @@ def evaluate_macro(macro_data: dict) -> tuple:
                 detail_logs.append(f"   * {name:<9}: 기본 안전 점수(2.0) 대체 계산")
         else:
             scores.append(2)
-            detail_logs.append(f"   * {name:<9}: 데이터 통신 허브 일시 제한으로 기본 안전 점수(2.0) 대체 계산")
+            detail_logs.append(f"   * {name:<9}: 기본 안전 점수(2.0) 대체 계산")
 
     avg_score = sum(scores) / len(scores) if scores else 1.50
 
@@ -68,14 +77,14 @@ def evaluate_macro(macro_data: dict) -> tuple:
     elif avg_score >= 1.5 and vix < 28:
         market_status = "🟡 CAUTION"
     else:
-        market_status = "🔴 OFF"
+        market_status = "🔴 OFF (신규 매수 셧다운)"
 
     return avg_score, market_status, vix, detail_logs, indices_summary
 
 
 def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series = None) -> dict:
     """
-    Stage 1-2 마크 미너비니 정밀 VCP (다중 수축 + 거래량 고갈 + 피벗 돌파) & SEPA 트렌드 템플릿
+    Stage 1-2 SEPA 트렌드 템플릿 8대 조건 필수 검증 & 정밀 VCP + 추격 매수 차단 캡 + 눌림목 지지
     """
     if df is None or df.empty or len(df) < 50:
         return get_fallback_data(ticker)
@@ -104,7 +113,9 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         high_52wk = float(df['High'].tail(min(252, len(df))).max())
         low_52wk = float(df['Low'].tail(min(252, len(df))).min())
 
-        # SEPA 8대 트렌드 템플릿
+        # ======================================================================
+        # 🌟 SEPA 8대 트렌드 템플릿 (100% 필수 0순위 관문)
+        # ======================================================================
         c1 = (curr_price > ma150_curr) and (curr_price > ma200_curr)
         c2 = ma150_curr > ma200_curr
         c3 = ma200_curr >= ma200_1m_ago
@@ -128,20 +139,19 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         passed_conditions_count = sum([c1, c2, c3, c4, c5, c6, c7, c8])
 
         # ======================================================================
-        # 🌟 [마크 미너비니 정밀 VCP 분석 알고리즘]
+        # 🌟 마크 미너비니 VCP & 실전 타점 정밀 분석
         # ======================================================================
         highs = df['High'].values
         lows = df['Low'].values
         volumes = df['Volume'].values
         n = len(df)
 
-        # 1) 다중 파동 수축 (Multi-Contraction: 1T vs 2T vs 3T)
+        # 1) 다중 파동 수축 (Multi-Contraction)
         if n >= 40:
             d1 = (np.max(highs[n-40:n-20]) - np.min(lows[n-40:n-20])) / curr_price
             d2 = (np.max(highs[n-20:n-5]) - np.min(lows[n-20:n-5])) / curr_price
             d3 = (np.max(highs[n-5:n]) - np.min(lows[n-5:n])) / curr_price
-
-            is_vcp_contraction = bool((d3 < d2 and d2 <= d1 * 1.15) or (d3 <= 0.05 and d2 < d1))
+            is_vcp_contraction = bool((d3 < d2 and d2 <= d1 * 1.15) or (d3 <= 0.055 and d2 < d1))
         else:
             is_vcp_contraction = False
 
@@ -154,16 +164,19 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         recent_vol_avg = float(np.mean(volumes[-4:])) if n >= 4 else float(volumes[-1])
         is_dry_up = bool(recent_vol_avg <= vol_ma50_curr * 0.85)
 
-        # 3) 피벗 포인트 (Pivot Price) 및 상방 돌파
+        # 3) 피벗 포인트 (최근 10일 저항선) 및 추격 매수 캡(+0.0% ~ +2.5% 이내)
         pivot_price = float(np.max(highs[-10:-1])) if n >= 11 else curr_price
         curr_vol = float(volumes[-1])
         vol_ratio = curr_vol / vol_ma20_curr if vol_ma20_curr > 0 else 1.0
 
-        is_pivot_breakout = bool((curr_price >= pivot_price * 0.995) and (vol_ratio >= 1.20))
-        is_vcp_ready = is_vcp_contraction and is_dry_up
+        # 피벗 상방 돌파 (피벗 돌파 직후 +0% ~ +2.5% 이내의 이상적 초입 타점)
+        pivot_dist_pct = ((curr_price - pivot_price) / pivot_price) * 100 if pivot_price > 0 else 0.0
+        is_ideal_pivot_entry = bool((0.0 <= pivot_dist_pct <= 2.5) and (vol_ratio >= 1.20))
+        is_over_chased = bool(pivot_dist_pct > 3.0)  # +3% 이상 이미 뜬 상투는 추격 매수 차단
 
-        # 피벗 거리 (20일선과의 이격도 %)
+        # 4) 20일선 거래량 마른 눌림목 지지 타점 (First Pullback to 20MA)
         disp_20 = ((curr_price - ma20_curr) / ma20_curr) * 100 if ma20_curr > 0 else 0.0
+        is_pullback_entry = bool(trend_template_pass and (-1.0 <= disp_20 <= 2.0) and is_dry_up and (curr_price >= ma20_curr * 0.99))
 
         # ATR(14)
         high_low = df['High'] - df['Low']
@@ -192,6 +205,7 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             '티커': ticker,
             '현재가': curr_price,
             '피벗거리(%)': round(float(disp_20), 2) if not pd.isna(disp_20) else 0.0,
+            '피벗돌파율(%)': round(float(pivot_dist_pct), 2),
             '승률': round(float(win_rate), 3),
             '손익비': round(float(payoff_ratio), 2),
             '켈리비중': round(float(recommended_weight), 4),
@@ -199,8 +213,10 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             '거래량배수': round(float(vol_ratio), 2),
             'VCP수축': is_vcp_contraction,
             '거래량고갈': is_dry_up,
-            '피벗돌파': is_pivot_breakout,
-            'VCP패턴': (is_vcp_contraction and is_dry_up) or is_pivot_breakout,
+            '피벗초입돌파': is_ideal_pivot_entry,
+            '눌림목지지': is_pullback_entry,
+            '단기과열여부': is_over_chased,
+            'VCP패턴': (is_vcp_contraction and is_dry_up) or is_ideal_pivot_entry or is_pullback_entry,
             'MA20': ma20_curr,
             'MA50': ma50_curr,
             'MA60': ma60_curr,
@@ -217,9 +233,9 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
 def get_fallback_data(ticker: str) -> dict:
     price = 73000.0 if ticker == "005930" else (172000.0 if ticker == "000660" else 150.0)
     return {
-        '티커': ticker, '현재가': price, '피벗거리(%)': -2.1, '승률': 0.45, '손익비': 1.1,
+        '티커': ticker, '현재가': price, '피벗거리(%)': -2.1, '피벗돌파율(%)': 0.0, '승률': 0.45, '손익비': 1.1,
         '켈리비중': 0.04, 'ATR': price * 0.025, '거래량배수': 1.0, 'VCP수축': False,
-        '거래량고갈': False, '피벗돌파': False, 'VCP패턴': False,
+        '거래량고갈': False, '피벗초입돌파': False, '눌림목지지': False, '단기과열여부': False, 'VCP패턴': False,
         'MA20': price * 1.03, 'MA50': price * 1.04, 'MA150': price * 1.05, 'MA200': price * 1.06,
         'MA60': price * 1.06, '트렌드_템플릿': "⚠️ 6/8", '템플릿_통과수': 6, '템플릿_PASS여부': False
     }
@@ -258,32 +274,22 @@ def calculate_portfolio_allocation(
     exchange_rate: float = 1350
 ) -> pd.DataFrame:
     """
-    Stage 4-5 자산배분 및 퀀트 랭킹 엔진 (최적 실전 하이브리드 VCP)
+    Stage 4-5 자산배분 및 퀀트 랭킹 엔진 (원전 완벽 구현 실전형 모델)
     """
     if pipeline_df is None or pipeline_df.empty:
         return None
 
-    if "옵션 A" in strategy_mode:
-        vol_thresh = 1.2
-        disp_thresh = 5.0
-    elif "옵션 B" in strategy_mode:
-        vol_thresh = 1.5
-        disp_thresh = 7.0
-    elif "옵션 C" in strategy_mode:
-        vol_thresh = 1.2
-        disp_thresh = 7.0
-    else:
-        vol_thresh = 1.5
-        disp_thresh = 5.0
+    # 시장 셧다운 판정: 하락장(🔴 OFF)일 경우 신규 매수 전면 차단
+    is_market_shutdown = "🔴" in market_status
 
     df = pipeline_df.copy()
 
-    # 하락 추세 종목 사전 배제
+    # 하락 추세 종목(MA20 < MA60 이면서 주가 < MA20) 사전 배제
     df = df[~((df['현재가'] < df['MA20']) & (df['MA20'] < df['MA60']))]
     if df.empty:
         df = pipeline_df.copy()
 
-    market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.1)
+    market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.0)
     df['켈리비중'] = df['켈리비중'].fillna(0.04)
     df['최종비중'] = df['켈리비중'] * market_multiplier
 
@@ -296,36 +302,50 @@ def calculate_portfolio_allocation(
         ma60 = float(row['MA60']) if pd.notna(row['MA60']) else curr
         disp_20 = float(row['피벗거리(%)']) if pd.notna(row['피벗거리(%)']) else 0.0
         vol_ratio = float(row['거래량배수']) if pd.notna(row['거래량배수']) else 1.0
-        is_breakout = bool(row.get('피벗돌파', False))
+        is_template_pass = bool(row.get('템플릿_PASS여부', False))
+        is_pivot_entry = bool(row.get('피벗초입돌파', False))
+        is_pullback = bool(row.get('눌림목지지', False))
+        is_over_chased = bool(row.get('단기과열여부', False))
         is_vcp_ready = bool(row.get('VCP수축', False) and row.get('거래량고갈', False))
-        is_vcp = bool(row.get('VCP패턴', False))
 
-        is_high_volume = vol_ratio >= vol_thresh
+        # 1. 시장 하락장 셧다운 시
+        if is_market_shutdown:
+            stage, strategy, priority = "시장 관망", "🛑 하락장 매수 셧다운 (현금 100% 대기)", 90
 
-        if curr < ma20 and ma20 < ma60:
+        # 2. 역배열 하락세
+        elif curr < ma20 and ma20 < ma60:
             stage, strategy, priority = "5단계 (하락)", "❌ 매수 금지 (하방 이탈)", 99
-        elif curr >= ma20 and ma20 < ma60:
-            stage, strategy, priority = "1단계 (회복)", "✅ 돌파 타점 관망 대기", 5
-        elif curr >= ma20 and ma20 >= ma60:
-            if 0 <= disp_20 <= disp_thresh:
-                if is_breakout:
-                    stage, strategy, priority = "3단계 (가속)", "🔥 VCP 피벗 돌파 (최우선 매수)", 1
-                elif is_high_volume and is_vcp:
-                    stage, strategy, priority = "3단계 (가속)", "🔥 VCP 돌파 (거래량 동반 매수)", 2
-                elif is_high_volume:
-                    stage, strategy, priority = "3단계 (가속)", "🔥 불타기 (거래량 동반 매수)", 3
-                elif is_vcp_ready:
-                    stage, strategy, priority = "2단계 (수축)", "💎 VCP 수축 완료 (돌파 임박 대기)", 4
-                else:
-                    stage, strategy, priority = "3단계 (가속)", "⚠️ 보유 (거래량 부족 추가 유보)", 5
-            elif disp_20 > disp_thresh:
-                stage, strategy, priority = "2단계 (과열)", "🚨 단기 과열 (신규진입 금지)", 7
+
+        # 3. 단기 과열 (추격 매수 차단: 이미 +3% 이상 뜸)
+        elif is_over_chased or disp_20 > 5.5:
+            stage, strategy, priority = "2단계 (과열)", "🚨 단기 과열 (추격 매수 금지 - 고점 덫)", 8
+
+        # 4. 트렌드 템플릿 PASS 종목의 정밀 실전 타점
+        elif is_template_pass:
+            if is_pivot_entry:
+                stage, strategy, priority = "3단계 (가속)", "🔥 VCP 피벗 초입 돌파 (최우선 매수)", 1
+            elif is_pullback:
+                stage, strategy, priority = "2단계 (수축)", "💎 20일선 거래량 마른 눌림목 (저위험 매수)", 2
+            elif is_vcp_ready and 0.0 <= disp_20 <= 3.0:
+                stage, strategy, priority = "2단계 (수축)", "⏳ VCP 수축 완료 (돌파 임박 대기)", 3
+            elif vol_ratio >= 1.3 and 0.0 <= disp_20 <= 3.5:
+                stage, strategy, priority = "3단계 (가속)", "🔥 불타기 (거래량 동반 추가 매수)", 4
+            elif 0.0 <= disp_20 <= 4.0:
+                stage, strategy, priority = "2단계 (안정)", "📈 강력 보유 (추세 안정)", 5
             else:
-                stage, strategy, priority = "2단계 (안정)", "📈 강력 보유 (추세 안정)", 6
+                stage, strategy, priority = "3단계 (가속)", "⚠️ 보유 (거래량 부족 추가 유보)", 6
+
+        # 5. 트렌드 템플릿 미달 종목
+        elif curr >= ma20 and ma20 >= ma60:
+            if 0.0 <= disp_20 <= 3.0:
+                stage, strategy, priority = "관망", "⚠️ 트렌드 템플릿 조건 미달 (관망)", 7
+            else:
+                stage, strategy, priority = "관망", "⚠️ 관망", 8
+
         elif curr < ma20 and ma20 >= ma60:
-            stage, strategy, priority = "4단계 (이탈)", "💰 익절 확정 혹은 리스크 축소 분할매도", 8
+            stage, strategy, priority = "4단계 (이탈)", "💰 익절 확정 혹은 리스크 축소 분할매도", 9
         else:
-            stage, strategy, priority = "분석 대기", "관망", 9
+            stage, strategy, priority = "분석 대기", "관망", 10
 
         portfolio_status.append({'현재_단계': stage, '전략제언': strategy})
         sort_priority.append(priority)
@@ -334,7 +354,7 @@ def calculate_portfolio_allocation(
     df = pd.concat([df.reset_index(drop=True), status_df], axis=1)
     df['우선순위'] = sort_priority
 
-    # 코랩 랭킹 정렬: 우선순위(1~99) -> 템플릿 통과 여부(PASS 우선) -> 피벗거리(오름차순)
+    # 정렬: 우선순위(1~99) ➔ 템플릿 통과 여부(PASS 우선) ➔ 피벗거리(오름차순)
     df['템플릿_통과'] = df['트렌드_템플릿'].apply(lambda x: 0 if "✅" in str(x) else 1)
     df = df.sort_values(by=['우선순위', '템플릿_통과', '피벗거리(%)'], ascending=[True, True, True])
 
@@ -361,7 +381,7 @@ def calculate_portfolio_allocation(
         tk = str(row['티커'])
         curr = float(row['현재가']) if pd.notna(row['현재가']) and row['현재가'] > 0 else 100.0
         raw_price_list.append(curr)
-        w = float(row['최종비중']) if pd.notna(row['최종비중']) else 0.02
+        w = float(row['최종비중']) if pd.notna(row['최종비중']) else 0.0
         allocated_capital = float(capital) * w
 
         if tk.isdigit() and len(tk) == 6:
@@ -369,7 +389,7 @@ def calculate_portfolio_allocation(
         else:
             cost_per_share = curr * float(exchange_rate) * 1.004
 
-        if cost_per_share > 0 and not np.isnan(allocated_capital):
+        if cost_per_share > 0 and not np.isnan(allocated_capital) and allocated_capital > 0:
             qty = int(allocated_capital // cost_per_share)
         else:
             qty = 0
