@@ -1,0 +1,273 @@
+{
+  "accounts": {
+    "연금저축펀드": {
+      "type": "장기적립",
+      "cash_krw": 383564,
+      "cash_usd": 0.0,
+      "holdings": [
+        {
+          "ticker": "360750.KS",
+          "name": "TIGER 미국S&P500",
+          "shares": 120,
+          "avg_price": 25485,
+          "dividend_yield": 1.3,
+          "target_weight": 0.35
+        },
+        {
+          "ticker": "487230.KS",
+          "name": "KODEX 미국AI전력핵심인프라",
+          "shares": 165,
+          "avg_price": 23070,
+          "dividend_yield": 0.5,
+          "target_weight": 0.2
+        },
+        {
+          "ticker": "402970.KS",
+          "name": "ACE 미국배당다우존스",
+          "shares": 186,
+          "avg_price": 14210,
+          "dividend_yield": 3.8,
+          "target_weight": 0.2
+        },
+        {
+          "ticker": "102110.KS",
+          "name": "TIGER 200",
+          "shares": 19,
+          "avg_price": 99237,
+          "dividend_yield": 1.8,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "0053L0.KS",
+          "name": "TIGER 차이나휴머노이드로봇",
+          "shares": 253,
+          "avg_price": 11960,
+          "dividend_yield": 0.0,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "475720.KS",
+          "name": "RISE 200위클리커버드콜",
+          "shares": 40,
+          "avg_price": 12174,
+          "dividend_yield": 12.0,
+          "target_weight": 0.05
+        }
+      ]
+    },
+    "일반계좌(국내)": {
+      "type": "단기/배당",
+      "cash_krw": 636205,
+      "cash_usd": 0.0,
+      "holdings": [
+        {
+          "ticker": "402970.KS",
+          "name": "ACE 미국배당다우존스",
+          "shares": 107,
+          "avg_price": 13684,
+          "dividend_yield": 3.8,
+          "target_weight": 0.4
+        },
+        {
+          "ticker": "360750.KS",
+          "name": "TIGER 미국S&P500",
+          "shares": 44,
+          "avg_price": 24726,
+          "dividend_yield": 1.3,
+          "target_weight": 0.3
+        },
+        {
+          "ticker": "0035T0.KS",
+          "name": "PLUS 글로벌휴머노이드로봇액티브",
+          "shares": 110,
+          "avg_price": 20825,
+          "dividend_yield": 0.0,
+          "target_weight": 0.3
+        }
+      ]
+    },
+    "일반계좌(해외)": {
+      "type": "단기퀀트스윙",
+      "cash_krw": 91726,
+      "cash_usd": 68.25,
+      "holdings": [
+        {
+          "ticker": "FAST",
+          "name": "패스널 (FAST)",
+          "shares": 30.0,
+          "avg_price": 51.31,
+          "dividend_yield": 2.2,
+          "target_weight": 0.15
+        },
+        {
+          "ticker": "KO",
+          "name": "코카콜라 (KO)",
+          "shares": 15.0,
+          "avg_price": 88.69,
+          "dividend_yield": 3.1,
+          "target_weight": 0.15
+        },
+        {
+          "ticker": "JNJ",
+          "name": "존슨앤존슨 (JNJ)",
+          "shares": 5.0,
+          "avg_price": 267.05,
+          "dividend_yield": 3.2,
+          "target_weight": 0.15
+        },
+        {
+          "ticker": "TLN",
+          "name": "탈렌에너지 (TLN)",
+          "shares": 3.0,
+          "avg_price": 336.22,
+          "dividend_yield": 0.0,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "DXCM",
+          "name": "덱스컴 (DXCM)",
+          "shares": 11.0,
+          "avg_price": 88.6,
+          "dividend_yield": 0.0,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "AES",
+          "name": "AES (AES)",
+          "shares": 35.0,
+          "avg_price": 14.76,
+          "dividend_yield": 4.5,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "BIIB",
+          "name": "바이오젠 (BIIB)",
+          "shares": 2.0,
+          "avg_price": 217.96,
+          "dividend_yield": 0.0,
+          "target_weight": 0.1
+        },
+        {
+          "ticker": "MUU",
+          "name": "MUU (MUU)",
+          "shares": 4.08,
+          "avg_price": 39.23,
+          "dividend_yield": 0.0,
+          "target_weight": 0.05
+        }
+      ]
+    },
+    "ISA": {
+      "type": "장기적립",
+      "cash_krw": 446865,
+      "cash_usd": 0.0,
+      "holdings": [
+        {
+          "ticker": "368590.KS",
+          "name": "RISE 미국나스닥100",
+          "shares": 123,
+          "avg_price": 30637,
+          "dividend_yield": 0.6,
+          "target_weight": 0.6
+        },
+        {
+          "ticker": "446720.KS",
+          "name": "SOL 미국배당다우존스",
+          "shares": 169,
+          "avg_price": 13891,
+          "dividend_yield": 3.8,
+          "target_weight": 0.4
+        }
+      ]
+    },
+    "IRP및코인": {
+      "type": "자산배분",
+      "cash_krw": 3121922,
+      "cash_usd": 0,
+      "holdings": [
+        {
+          "ticker": "BTC-KRW",
+          "name": "비트코인 (BTC)",
+          "shares": 0.00022697,
+          "avg_price": 115230000,
+          "dividend_yield": 0.0,
+          "target_weight": 0.01
+        }
+      ]
+    }
+  },
+  "asset_history": [
+    {
+      "date": "2026-05-30",
+      "equity": 35879655,
+      "cost": 31983589,
+      "return_pct": 8.43
+    },
+    {
+      "date": "2026-06-06",
+      "equity": 35272162,
+      "cost": 32947589,
+      "return_pct": 6.59
+    },
+    {
+      "date": "2026-06-10",
+      "equity": 34473906,
+      "cost": 33033549,
+      "return_pct": 4.18
+    },
+    {
+      "date": "2026-06-22",
+      "equity": 35801016,
+      "cost": 33091315,
+      "return_pct": 8.19
+    },
+    {
+      "date": "2026-06-27",
+      "equity": 35911161,
+      "cost": 34291499,
+      "return_pct": 4.72
+    },
+    {
+      "date": "2026-07-10",
+      "equity": 33485374,
+      "cost": 33805878,
+      "return_pct": -0.95
+    },
+    {
+      "date": "2026-07-17",
+      "equity": 37803751,
+      "cost": 38806105,
+      "return_pct": -2.58
+    },
+    {
+      "date": "2026-08-01",
+      "equity": 37087771,
+      "cost": 39217889,
+      "return_pct": -5.43
+    },
+    {
+      "date": "2026-08-15",
+      "equity": 39376352,
+      "cost": 39221859,
+      "return_pct": 0.39
+    },
+    {
+      "date": "2026-08-31",
+      "equity": 38237956,
+      "cost": 39998414,
+      "return_pct": -4.4
+    },
+    {
+      "date": "2026-09-19",
+      "equity": 38702395,
+      "cost": 39646502,
+      "return_pct": -2.38
+    },
+    {
+      "date": "2026-09-28",
+      "equity": 39230965,
+      "cost": 40660855,
+      "return_pct": -3.52
+    }
+  ]
+}
