@@ -317,6 +317,58 @@ def fetch_benchmark_close(period: str = '1y') -> pd.Series:
     return None
 
 
+def extract_single_stock_df(raw_data: pd.DataFrame, search_ticker: str) -> pd.DataFrame:
+    """
+    yf.download의 MultiIndex/SingleIndex 결과에서 단일 종목의 정규화된 OHLCV DataFrame을 완벽하게 추출합니다.
+    """
+    if raw_data is None or raw_data.empty:
+        return pd.DataFrame()
+
+    df = pd.DataFrame()
+    if isinstance(raw_data.columns, pd.MultiIndex):
+        # 1. Level 0에 티커가 있는 경우
+        if search_ticker in raw_data.columns.levels[0]:
+            df = raw_data[search_ticker].copy()
+        # 2. Level 1에 티커가 있는 경우
+        elif search_ticker in raw_data.columns.levels[1]:
+            df = raw_data.xs(search_ticker, axis=1, level=1).copy()
+        else:
+            # 3. 대소문자나 특수문자 차이 매칭
+            lvl0 = [str(x).upper() for x in raw_data.columns.levels[0]]
+            lvl1 = [str(x).upper() for x in raw_data.columns.levels[1]]
+            st_upper = str(search_ticker).upper()
+            if st_upper in lvl0:
+                idx = lvl0.index(st_upper)
+                actual_tk = raw_data.columns.levels[0][idx]
+                df = raw_data[actual_tk].copy()
+            elif st_upper in lvl1:
+                idx = lvl1.index(st_upper)
+                actual_tk = raw_data.columns.levels[1][idx]
+                df = raw_data.xs(actual_tk, axis=1, level=1).copy()
+            else:
+                if len(raw_data.columns.levels[0]) == 1:
+                    df = raw_data.droplevel(0, axis=1).copy()
+                elif len(raw_data.columns.levels[1]) == 1:
+                    df = raw_data.droplevel(1, axis=1).copy()
+                else:
+                    df = raw_data.copy()
+    else:
+        df = raw_data.copy()
+
+    # MultiIndex가 남아있을 경우 단일 레벨 컬럼으로 평탄화
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = [c[0] if isinstance(c, tuple) else c for c in df.columns]
+
+    # 컬럼명 앞뒤 공백 제거 및 첫 글자 대문자 표준화
+    col_map = {c: str(c).strip().capitalize() for c in df.columns}
+    df = df.rename(columns=col_map)
+
+    if 'Close' in df.columns:
+        df = df.dropna(subset=['Close'])
+
+    return df
+
+
 def fetch_all_stock_history_batch(tickers: list, select_mode: str = "", period: str = "1y") -> dict:
     """
     [핵심 최적화] yf.download를 통한 전 종목 시세 초고속 일괄 병렬 수집
@@ -337,13 +389,7 @@ def fetch_all_stock_history_batch(tickers: list, select_mode: str = "", period: 
 
         for orig_t, search_t in clean_tickers_map.items():
             try:
-                if len(unique_search_tickers) == 1:
-                    df = raw_data.copy()
-                else:
-                    if search_t in raw_data.columns.levels[0]:
-                        df = raw_data[search_t].dropna(subset=['Close']).copy()
-                    else:
-                        df = pd.DataFrame()
+                df = extract_single_stock_df(raw_data, search_t)
                 stock_dfs[orig_t] = df
             except Exception:
                 stock_dfs[orig_t] = pd.DataFrame()
