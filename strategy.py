@@ -201,6 +201,8 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             kelly_f = 0.04
         recommended_weight = max(0.04, float(kelly_f * 0.5)) if trend_template_pass else 0.02
 
+        stop_loss_price = curr_price * 0.93
+
         return {
             '티커': ticker,
             '현재가': curr_price,
@@ -222,9 +224,13 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             'MA60': ma60_curr,
             'MA150': ma150_curr,
             'MA200': ma200_curr,
+            '52주신고가': high_52wk,
+            '52주신저가': low_52wk,
+            '손절라인': stop_loss_price,
             '트렌드_템플릿': "✅ PASS" if trend_template_pass else f"⚠️ {passed_conditions_count}/8",
             '템플릿_통과수': passed_conditions_count,
-            '템플릿_PASS여부': trend_template_pass
+            '템플릿_PASS여부': trend_template_pass,
+            'c1': c1, 'c2': c2, 'c3': c3, 'c4': c4, 'c5': c5, 'c6': c6, 'c7': c7, 'c8': c8
         }
     except Exception:
         return get_fallback_data(ticker)
@@ -237,7 +243,9 @@ def get_fallback_data(ticker: str) -> dict:
         '켈리비중': 0.04, 'ATR': price * 0.025, '거래량배수': 1.0, 'VCP수축': False,
         '거래량고갈': False, '피벗초입돌파': False, '눌림목지지': False, '단기과열여부': False, 'VCP패턴': False,
         'MA20': price * 1.03, 'MA50': price * 1.04, 'MA150': price * 1.05, 'MA200': price * 1.06,
-        'MA60': price * 1.06, '트렌드_템플릿': "⚠️ 6/8", '템플릿_통과수': 6, '템플릿_PASS여부': False
+        'MA60': price * 1.06, '52주신고가': price * 1.2, '52주신저가': price * 0.7, '손절라인': price * 0.93,
+        '트렌드_템플릿': "⚠️ 6/8", '템플릿_통과수': 6, '템플릿_PASS여부': False,
+        'c1': True, 'c2': True, 'c3': True, 'c4': True, 'c5': True, 'c6': False, 'c7': False, 'c8': True
     }
 
 

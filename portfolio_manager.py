@@ -217,6 +217,9 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             if live_p <= 0:
                 live_p = avg_p  # 시세 미제공 시 매수가 대체
 
+            # 6대 자산 팩터 카테고리 분류
+            asset_cat = classify_asset_category(tk, name)
+
             # 금액 계산 (원화 환산)
             if is_usd_account:
                 eval_val_krw = shares * live_p * exchange_rate
@@ -289,6 +292,7 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             h_row = {
                 '계좌': acc_name,
                 '계좌유형': acc_type,
+                '자산분류': asset_cat,
                 '종목명': name,
                 '티커': tk,
                 '수량': shares,
@@ -344,7 +348,102 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
         total_cash_krw += total_acc_cash_krw
         total_annual_dividend_krw += acc_annual_div_krw
 
-    # 4. 내 잔고 기반 맞춤형 주문표 (Rebalancing & Action Suggestions) 산출
+    # --------------------------------------------------------------------------
+    # 4. 6대 자산 팩터별 카테고리 집계 & 목표치 대비 분석
+    # --------------------------------------------------------------------------
+    target_alloc = portfolio_data.get("target_allocation", {})
+    target_accounts = target_alloc.get("accounts", DEFAULT_ACCOUNT_TARGETS)
+    target_categories = target_alloc.get("categories", DEFAULT_CATEGORY_TARGETS)
+
+    categories_data = {
+        "🌱 글로벌 코어 지수": {"eval_krw": 0.0, "cost_krw": 0.0, "annual_div_krw": 0.0, "holdings": []},
+        "💰 고배당 & 인컴": {"eval_krw": 0.0, "cost_krw": 0.0, "annual_div_krw": 0.0, "holdings": []},
+        "🤖 테마 & 미래혁신": {"eval_krw": 0.0, "cost_krw": 0.0, "annual_div_krw": 0.0, "holdings": []},
+        "🚀 퀀트 스윙 & 모멘텀": {"eval_krw": 0.0, "cost_krw": 0.0, "annual_div_krw": 0.0, "holdings": []},
+        "🪙 대체자산 (코인)": {"eval_krw": 0.0, "cost_krw": 0.0, "annual_div_krw": 0.0, "holdings": []},
+        "💵 안전 현금": {"eval_krw": total_cash_krw, "cost_krw": total_cash_krw, "annual_div_krw": 0.0, "holdings": []}
+    }
+
+    for h in all_holding_rows:
+        cat = h.get("자산분류", "🚀 퀀트 스윙 & 모멘텀")
+        if cat in categories_data:
+            categories_data[cat]["eval_krw"] += h["평가금액(원)"]
+            categories_data[cat]["cost_krw"] += h["매수금액(원)"]
+            categories_data[cat]["annual_div_krw"] += h["연간예상배당(원)"]
+            categories_data[cat]["holdings"].append(h)
+
+    # 5대 계좌별 현수준 vs 목표 비교 리스트 (도넛 차트 옆 비주얼 카드용)
+    account_comparison = []
+    for acc_name, acc_eval in evaluated_accounts.items():
+        curr_w = (acc_eval['total_eval_krw'] / total_net_worth * 100.0) if total_net_worth > 0 else 0.0
+        target_w = float(target_accounts.get(acc_name, DEFAULT_ACCOUNT_TARGETS.get(acc_name, 0.20))) * 100.0
+        gap = curr_w - target_w
+        
+        if abs(gap) <= 2.0:
+            status_badge = "● 적정 비중 (유지)"
+            status_color = "#10B981"  # 초록
+            status_tag = "normal"
+        elif gap < -2.0:
+            status_badge = f"▲ {abs(gap):.1f}% 부족 (적립 권장)"
+            status_color = "#2563EB"  # 파랑
+            status_tag = "under"
+        else:
+            status_badge = f"▼ {gap:.1f}% 초과 (리밸런싱)"
+            status_color = "#F59E0B"  # 주황
+            status_tag = "over"
+
+        account_comparison.append({
+            "account": acc_name,
+            "type": acc_eval['type'],
+            "eval_krw": acc_eval['total_eval_krw'],
+            "current_weight": curr_w,
+            "target_weight": target_w,
+            "gap": gap,
+            "status_badge": status_badge,
+            "status_color": status_color,
+            "status_tag": status_tag
+        })
+
+    # 6대 자산군별 현수준 vs 목표 비교 리스트 (자산 배분 탭용)
+    category_comparison = []
+    for cat_name, cat_info in categories_data.items():
+        curr_w = (cat_info['eval_krw'] / total_net_worth * 100.0) if total_net_worth > 0 else 0.0
+        target_w = float(target_categories.get(cat_name, DEFAULT_CATEGORY_TARGETS.get(cat_name, 0.15))) * 100.0
+        gap = curr_w - target_w
+        cat_div_krw = cat_info['annual_div_krw']
+        target_eval_krw = total_net_worth * (target_w / 100.0)
+        rebalance_krw = target_eval_krw - cat_info['eval_krw']
+
+        if abs(gap) <= 2.0:
+            status_badge = "● 적정 비중 (유지)"
+            status_color = "#10B981"
+            action_advice = "현 비중 유지"
+        elif gap < -2.0:
+            status_badge = f"▲ {abs(gap):.1f}% 부족 (확대 필요)"
+            status_color = "#2563EB"
+            action_advice = f"+약 {int(abs(rebalance_krw)):,}원 추가 매수/적립"
+        else:
+            status_badge = f"▼ {gap:.1f}% 초과 (비중 축소)"
+            status_color = "#F59E0B"
+            action_advice = f"-약 {int(rebalance_krw):,}원 이익실현/축소"
+
+        category_comparison.append({
+            "category": cat_name,
+            "eval_krw": cat_info['eval_krw'],
+            "cost_krw": cat_info['cost_krw'],
+            "current_weight": curr_w,
+            "target_weight": target_w,
+            "target_eval_krw": target_eval_krw,
+            "rebalance_krw": rebalance_krw,
+            "gap": gap,
+            "annual_div_krw": cat_div_krw,
+            "holdings_count": len(cat_info['holdings']),
+            "status_badge": status_badge,
+            "status_color": status_color,
+            "action_advice": action_advice
+        })
+
+    # 5. 내 잔고 기반 맞춤형 주문표 (Rebalancing & Action Suggestions) 산출
     for acc_name, acc_eval in evaluated_accounts.items():
         acc_type = acc_eval['type']
         acc_total_val = acc_eval['total_eval_krw']
@@ -406,7 +505,12 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
         'all_holdings_df': pd.DataFrame(all_holding_rows),
         'prescriptions': prescriptions,
         'order_suggestions': pd.DataFrame(order_suggestions),
-        'asset_history': portfolio_data.get("asset_history", [])
+        'asset_history': portfolio_data.get("asset_history", []),
+        'account_comparison': account_comparison,
+        'category_comparison': category_comparison,
+        'categories_data': categories_data,
+        'target_accounts': target_accounts,
+        'target_categories': target_categories
     }
 
 

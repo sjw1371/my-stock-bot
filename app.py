@@ -48,7 +48,11 @@ from portfolio_manager import (
     save_portfolio_data,
     analyze_my_portfolio,
     parse_pasted_csv_text,
-    fetch_live_exchange_rate
+    fetch_live_exchange_rate,
+    save_target_allocation,
+    DEFAULT_ACCOUNT_TARGETS,
+    DEFAULT_CATEGORY_TARGETS,
+    classify_asset_category
 )
 
 # ==============================================================================
@@ -94,8 +98,15 @@ with st.sidebar:
     st.markdown("---")
 
     st.subheader("🔍 1. 시장 스캔 설정")
-    market_options = ["1. S&P500", "2. nasdaq", "3. 코스피", "4. 코스닥", "5. 전체", "6. 직접입력"]
-    select_mode = st.selectbox("스캔 대상 시장", market_options, index=2)
+    market_options = [
+        "1. S&P 500 (503개 전수)",
+        "2. NASDAQ (200개 전수)",
+        "3. 코스피 200 (200개 전수)",
+        "4. 코스닥 150 (150개 전수)",
+        "5. 글로벌 통합 전수 (850+개 전체)",
+        "6. 직접입력"
+    ]
+    select_mode = st.selectbox("스캔 대상 시장", market_options, index=0)
 
     raw_input_tickers = ""
     if select_mode == "6. 직접입력":
@@ -185,8 +196,9 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 st.markdown('<div class="main-header">💼 JTI 나만의 AI 자산관리 PB & 마크 미너비니 퀀트 시스템</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="sub-header">내 5대 계좌 실시간 통합 관리 · Dual-Track 건강검진 & 맞춤 주문표 · SEPA 트렌드 템플릿 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
 
-tab_my_account, tab_scanner, tab_backtest = st.tabs([
-    "💼 [내 계좌] 실시간 종합 관리 & 맞춤 진단",
+tab_my_account, tab_allocator, tab_scanner, tab_backtest = st.tabs([
+    "💼 [내 계좌] 실시간 종합 관리 & AI 맞춤 진단",
+    "🧭 [자산 배분] Dual-Lens 포트폴리오 빌더 & What-If",
     "📡 [시장 스캐너] SEPA 트렌드 & 정밀 VCP",
     "📊 [백테스팅] 10년 과거 검증 시뮬레이터"
 ])
@@ -249,9 +261,9 @@ with tab_my_account:
     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 📈 2. 총자산 시계열 추이 차트 & 계좌별 비중
+    # 📈 2. 총자산 시계열 추이 차트 & 계좌별 비중 및 목표 비교
     # --------------------------------------------------------------------------
-    c_col1, c_col2 = st.columns([1.4, 1.0])
+    c_col1, c_col2 = st.columns([1.1, 1.3])
 
     with c_col1:
         st.markdown("### 📈 총자산 평가액 및 원금 추이 (2026년 5월 ~ 현재)")
@@ -270,7 +282,7 @@ with tab_my_account:
                 line=dict(color='#9CA3AF', width=1.5, dash='dash')
             ))
             fig_hist.update_layout(
-                height=300,
+                height=320,
                 margin=dict(t=20, b=20, l=20, r=20),
                 template="plotly_white",
                 legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
@@ -280,24 +292,54 @@ with tab_my_account:
             st.info("자산 추이 데이터가 없습니다.")
 
     with c_col2:
-        st.markdown("### 🥧 5대 계좌별 자산 배분 비중")
-        acc_data = my_analysis['accounts']
-        acc_names = list(acc_data.keys())
-        acc_values = [acc_data[a]['total_eval_krw'] for a in acc_names]
+        st.markdown("### 🥧 5대 계좌별 자산 배분 & 현수준 vs 목표 비교")
+        pie_sub1, pie_sub2 = st.columns([1.0, 1.25])
 
-        fig_acc_pie = go.Figure(data=[go.Pie(
-            labels=acc_names,
-            values=acc_values,
-            hole=.4,
-            textinfo='label+percent',
-            marker=dict(colors=['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'])
-        )])
-        fig_acc_pie.update_layout(
-            height=300,
-            margin=dict(t=20, b=20, l=20, r=20),
-            showlegend=False
-        )
-        st.plotly_chart(fig_acc_pie, use_container_width=True)
+        with pie_sub1:
+            acc_data = my_analysis['accounts']
+            acc_names = list(acc_data.keys())
+            acc_values = [acc_data[a]['total_eval_krw'] for a in acc_names]
+
+            fig_acc_pie = go.Figure(data=[go.Pie(
+                labels=acc_names,
+                values=acc_values,
+                hole=.45,
+                textinfo='label+percent',
+                marker=dict(colors=['#3B82F6', '#10B981', '#F59E0B', '#8B5CF6', '#EC4899'])
+            )])
+            fig_acc_pie.update_layout(
+                height=300,
+                margin=dict(t=10, b=10, l=10, r=10),
+                showlegend=False
+            )
+            st.plotly_chart(fig_acc_pie, use_container_width=True)
+
+        with pie_sub2:
+            st.markdown("<div style='margin-top: 2px;'>", unsafe_allow_html=True)
+            for item in my_analysis['account_comparison']:
+                acc = item['account']
+                curr_w = item['current_weight']
+                tgt_w = item['target_weight']
+                badge = item['status_badge']
+                color = item['status_color']
+                eval_val = int(item['eval_krw'])
+                
+                st.markdown(f"""
+                <div style="background: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 8px; padding: 6px 10px; margin-bottom: 5px; box-shadow: 0 1px 2px rgba(0,0,0,0.02);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px;">
+                        <span style="font-weight: 600; font-size: 0.83rem; color: #1E293B;">{acc}</span>
+                        <span style="font-size: 0.82rem; font-weight: 700; color: {color};">{curr_w:.1f}% <span style="font-weight: 400; color: #64748B; font-size: 0.72rem;">(목표 {tgt_w:.0f}%)</span></span>
+                    </div>
+                    <div style="background: #E2E8F0; border-radius: 3px; height: 5px; overflow: hidden; margin-bottom: 3px;">
+                        <div style="background: {color}; width: {min(100, curr_w)}%; height: 100%; border-radius: 3px;"></div>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="font-size: 0.68rem; color: #64748B;">약 {eval_val:,}원</span>
+                        <span style="font-size: 0.68rem; color: {color}; font-weight: 600;">{badge}</span>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("---")
 
@@ -467,7 +509,237 @@ with tab_my_account:
 
 
 # ==============================================================================
-# 탭 2: [시장 스캐너] SEPA 트렌드 & 정밀 VCP
+# 탭 2: [자산 배분] Dual-Lens 포트폴리오 빌더 & What-If 시뮬레이터
+# ==============================================================================
+with tab_allocator:
+    st.subheader("🧭 Dual-Lens 스마트 자산 배분 & 포트폴리오 빌더")
+    st.markdown("내 전체 자산(약 **3,900만 원**)을 **[6대 자산 팩터]**와 **[5대 계좌]**의 듀얼 렌즈로 진단하고, 목표 포트폴리오 비중을 슬라이더로 조절하여 **리밸런싱 매매 금액** 및 **예상 연간 배당금 변화**를 실시간으로 시뮬레이션합니다.")
+
+    # --------------------------------------------------------------------------
+    # 🌟 Step 1: AI 3대 투자 전략 프리셋
+    # --------------------------------------------------------------------------
+    st.markdown("### 🌟 Step 1: AI 3대 투자 전략 프리셋 (원클릭 세팅)")
+    
+    preset_choice = st.radio(
+        "추천 자산 배분 모델을 선택하거나 직접 슬라이더로 커스텀 설정하세요:",
+        options=[
+            "⚖️ [밸런스 Dual-Track (추천)] (글로벌 코어 35% + 고배당 30% + 테마/혁신 15% + 퀀트스윙 10% + 현금 8% + 코인 2%)",
+            "🔥 [공격적 복리 성장형] (글로벌 코어 45% + 테마/혁신 25% + 퀀트스윙 15% + 고배당 5% + 현금 8% + 코인 2%)",
+            "🛡️ [배당 인컴 & 방어형] (고배당 50% + 글로벌 코어 25% + 안전현금 15% + 테마/스윙 10%)",
+            "🎛️ [사용자 직접 커스텀 조절]"
+        ],
+        index=0
+    )
+
+    preset_map = {
+        "⚖️ [밸런스 Dual-Track (추천)] (글로벌 코어 35% + 고배당 30% + 테마/혁신 15% + 퀀트스윙 10% + 현금 8% + 코인 2%)": {
+            "🌱 글로벌 코어 지수": 35,
+            "💰 고배당 & 인컴": 30,
+            "🤖 테마 & 미래혁신": 15,
+            "🚀 퀀트 스윙 & 모멘텀": 10,
+            "🪙 대체자산 (코인)": 2,
+            "💵 안전 현금": 8
+        },
+        "🔥 [공격적 복리 성장형] (글로벌 코어 45% + 테마/혁신 25% + 퀀트스윙 15% + 고배당 5% + 현금 8% + 코인 2%)": {
+            "🌱 글로벌 코어 지수": 45,
+            "💰 고배당 & 인컴": 5,
+            "🤖 테마 & 미래혁신": 25,
+            "🚀 퀀트 스윙 & 모멘텀": 15,
+            "🪙 대체자산 (코인)": 2,
+            "💵 안전 현금": 8
+        },
+        "🛡️ [배당 인컴 & 방어형] (고배당 50% + 글로벌 코어 25% + 안전현금 15% + 테마/스윙 10%)": {
+            "🌱 글로벌 코어 지수": 25,
+            "💰 고배당 & 인컴": 50,
+            "🤖 테마 & 미래혁신": 5,
+            "🚀 퀀트 스윙 & 모멘텀": 5,
+            "🪙 대체자산 (코인)": 0,
+            "💵 안전 현금": 15
+        }
+    }
+
+    current_saved_targets = raw_p_data.get("target_allocation", {}).get("categories", DEFAULT_CATEGORY_TARGETS)
+    
+    if preset_choice in preset_map:
+        selected_weights = preset_map[preset_choice]
+    else:
+        selected_weights = {k: int(v * 100) if v <= 1.0 else int(v) for k, v in current_saved_targets.items()}
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # 🎛️ Step 2: What-If 인터랙티브 슬라이더 & 비포/애프터 비교
+    # --------------------------------------------------------------------------
+    st.markdown("### 🎛️ Step 2: What-If 인터랙티브 슬라이더 & 비포/애프터 실시간 비교")
+
+    sim_col1, sim_col2 = st.columns([1.1, 1.3])
+
+    with sim_col1:
+        st.markdown("**📊 6대 자산 팩터별 목표 비중 설정 (%)**")
+        sim_core = st.slider("🌱 글로벌 코어 지수 (%)", 0, 100, selected_weights.get("🌱 글로벌 코어 지수", 35), step=1)
+        sim_div = st.slider("💰 고배당 & 인컴 (%)", 0, 100, selected_weights.get("💰 고배당 & 인컴", 30), step=1)
+        sim_theme = st.slider("🤖 테마 & 미래혁신 (%)", 0, 100, selected_weights.get("🤖 테마 & 미래혁신", 15), step=1)
+        sim_swing = st.slider("🚀 퀀트 스윙 & 모멘텀 (%)", 0, 100, selected_weights.get("🚀 퀀트 스윙 & 모멘텀", 10), step=1)
+        sim_coin = st.slider("🪙 대체자산 (코인) (%)", 0, 20, selected_weights.get("🪙 대체자산 (코인)", 2), step=1)
+        sim_cash = st.slider("💵 안전 현금 (%)", 0, 50, selected_weights.get("💵 안전 현금", 8), step=1)
+
+        total_sim_weight = sim_core + sim_div + sim_theme + sim_swing + sim_coin + sim_cash
+        if total_sim_weight == 100:
+            st.success(f"✅ 목표 비중 합계: **{total_sim_weight}%** (정상)")
+        else:
+            diff = 100 - total_sim_weight
+            st.warning(f"⚠️ 목표 비중 합계: **{total_sim_weight}%** (100%가 되도록 {'+' if diff > 0 else ''}{diff}% 조정 필요)")
+
+        if st.button("💾 이 배분 전략을 내 공식 목표로 영구 저장", type="primary"):
+            new_cat_targets = {
+                "🌱 글로벌 코어 지수": sim_core / 100.0,
+                "💰 고배당 & 인컴": sim_div / 100.0,
+                "🤖 테마 & 미래혁신": sim_theme / 100.0,
+                "🚀 퀀트 스윙 & 모멘텀": sim_swing / 100.0,
+                "🪙 대체자산 (코인)": sim_coin / 100.0,
+                "💵 안전 현금": sim_cash / 100.0
+            }
+            save_target_allocation(category_targets=new_cat_targets)
+            st.success("🎉 새로운 자산 배분 목표가 영구 저장되었습니다!")
+            st.rerun()
+
+    sim_targets_map = {
+        "🌱 글로벌 코어 지수": sim_core,
+        "💰 고배당 & 인컴": sim_div,
+        "🤖 테마 & 미래혁신": sim_theme,
+        "🚀 퀀트 스윙 & 모멘텀": sim_swing,
+        "🪙 대체자산 (코인)": sim_coin,
+        "💵 안전 현금": sim_cash
+    }
+
+    total_equity = my_analysis['total_net_worth']
+    
+    # 예상 배당금 계산 (고배당 평균 4.5%, 코어 1.3%, 테마 0.5%, 기타 0%)
+    sim_div_krw = (total_equity * (sim_div / 100.0) * 0.045) + (total_equity * (sim_core / 100.0) * 0.013) + (total_equity * (sim_theme / 100.0) * 0.005)
+    current_div_krw = my_analysis['total_annual_dividend_krw']
+    div_delta_krw = sim_div_krw - current_div_krw
+
+    with sim_col2:
+        d_m1, d_m2, d_m3 = st.columns(3)
+        with d_m1:
+            st.metric(
+                label="💰 시뮬레이션 예상 연배당",
+                value=f"연 {int(sim_div_krw):,}원",
+                delta=f"{int(div_delta_krw):+,}원 ({'증가' if div_delta_krw >= 0 else '감소'})"
+            )
+        with d_m2:
+            st.metric(
+                label="💵 시뮬레이션 월배당",
+                value=f"월 {int(sim_div_krw / 12):,}원",
+                delta=f"연 배당률 {(sim_div_krw / total_equity * 100):.2f}%"
+            )
+        with d_m3:
+            growth_ratio = sim_core + sim_theme + sim_swing
+            income_ratio = sim_div
+            st.metric(
+                label="⚖️ 성장형 vs 인컴형 비율",
+                value=f"{growth_ratio}% : {income_ratio}%",
+                delta=f"현금 {sim_cash}%"
+            )
+
+        ch_c1, ch_c2 = st.columns(2)
+        
+        cat_labels = list(my_analysis['categories_data'].keys())
+        cat_curr_vals = [my_analysis['categories_data'][k]['eval_krw'] for k in cat_labels]
+        fig_curr_cat = go.Figure(data=[go.Pie(
+            labels=cat_labels,
+            values=cat_curr_vals,
+            hole=.45,
+            textinfo='percent',
+            title='현재 포트폴리오',
+            marker=dict(colors=['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#64748B'])
+        )])
+        fig_curr_cat.update_layout(height=240, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
+
+        cat_sim_vals = [sim_targets_map.get(k, 0) for k in cat_labels]
+        fig_sim_cat = go.Figure(data=[go.Pie(
+            labels=cat_labels,
+            values=cat_sim_vals,
+            hole=.45,
+            textinfo='percent',
+            title='시뮬레이션 목표',
+            marker=dict(colors=['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#64748B'])
+        )])
+        fig_sim_cat.update_layout(height=240, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
+
+        with ch_c1:
+            st.plotly_chart(fig_curr_cat, use_container_width=True)
+        with ch_c2:
+            st.plotly_chart(fig_sim_cat, use_container_width=True)
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # 📋 Step 3: 6대 자산 팩터별 리밸런싱 실행 계획표
+    # --------------------------------------------------------------------------
+    st.markdown("### 📋 Step 3: 6대 자산 팩터별 리밸런싱 실행 계획표")
+    
+    rebal_rows = []
+    for cat_name, cat_info in my_analysis['categories_data'].items():
+        curr_eval = cat_info['eval_krw']
+        curr_w = (curr_eval / total_equity * 100.0) if total_equity > 0 else 0.0
+        tgt_w = float(sim_targets_map.get(cat_name, 0.0))
+        tgt_eval = total_equity * (tgt_w / 100.0)
+        rebal_krw = tgt_eval - curr_eval
+        
+        h_names = [h['종목명'] for h in cat_info['holdings']]
+        h_str = ", ".join(h_names) if h_names else "현금 잔고"
+        
+        if abs(rebal_krw) < 100000:
+            act_text = "🟢 비중 적정 (유지)"
+        elif rebal_krw > 0:
+            act_text = f"🔵 +{int(rebal_krw):,}원 추가 매수/적립"
+        else:
+            act_text = f"🟠 -{int(abs(rebal_krw)):,}원 이익 실현/축소"
+
+        rebal_rows.append({
+            "자산 팩터": cat_name,
+            "현재 평가액": f"{int(curr_eval):,}원",
+            "현재 비중": f"{curr_w:.1f}%",
+            "목표 비중": f"{tgt_w:.0f}%",
+            "목표 평가액": f"{int(tgt_eval):,}원",
+            "조정 필요 금액": act_text,
+            "포함된 내 보유 종목": h_str
+        })
+
+    st.dataframe(
+        pd.DataFrame(rebal_rows),
+        use_container_width=True,
+        hide_index=True,
+        column_config={
+            "자산 팩터": st.column_config.TextColumn("자산 팩터", width="medium"),
+            "현재 평가액": st.column_config.TextColumn("현재 평가액", width="small"),
+            "현재 비중": st.column_config.TextColumn("현재 비중", width="small"),
+            "목표 비중": st.column_config.TextColumn("목표 비중", width="small"),
+            "목표 평가액": st.column_config.TextColumn("목표 평가액", width="small"),
+            "조정 필요 금액": st.column_config.TextColumn("리밸런싱 실행 제언", width="medium"),
+            "포함된 내 보유 종목": st.column_config.TextColumn("포함된 내 종목", width="large")
+        }
+    )
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # 🏦 Step 4: 5대 계좌별 세제 혜택 극대화 & 자금 배분 전략
+    # --------------------------------------------------------------------------
+    st.markdown("### 🏦 Step 4: 5대 계좌별 세제 혜택 극대화 & 자금 배분 가이드")
+    
+    k_col1, k_col2, k_col3 = st.columns(3)
+    with k_col1:
+        st.info("💡 **연금저축펀드 (목표 40%)**\n\n- 연간 600만 원 한도 세액공제(13.2~16.5% 환급)\n- 배당소득세(15.4%) 과세이연 혜택\n- 추천 자산: `TIGER 미국S&P500`, `ACE 미국배당다우존스`")
+    with k_col2:
+        st.info("💡 **ISA 계좌 (목표 20%)**\n\n- 순손익 200만~400만 원 비과세, 초과분 9.9% 분리과세\n- 국내상장 해외 ETF 및 고배당주 최적\n- 추천 자산: `SOL 미국배당다우존스`, `RISE 미국나스닥100`")
+    with k_col3:
+        st.info("💡 **일반계좌 (해외 25% / 국내 10%)**\n\n- 해외 주식: 연간 250만 원 양도소득세 기본공제\n- 단기 퀀트 스윙(SEPA VCP) 및 글로벌 우량 배당주\n- 추천 자산: `FAST`, `KO`, `JNJ`, `NVDA`, `MSFT`")
+
+
+# ==============================================================================
+# 탭 3: [시장 스캐너] SEPA 트렌드 & 정밀 VCP
 # ==============================================================================
 with tab_scanner:
     if 'results' not in st.session_state or run_btn:
@@ -569,6 +841,111 @@ with tab_scanner:
                 stock_row = final_df[final_df['티커'] == selected_ticker].iloc[0]
                 df_stock = results['stock_dfs'].get(selected_ticker)
 
+                # --------------------------------------------------------------
+                # 1. 🌟 상단 미너비니 전략 진단 & 매매 포지션 가이드 배너
+                # --------------------------------------------------------------
+                curr_price_str = stock_row.get('현재가_표기', f"{stock_row.get('현재가', 0):,}")
+                st.markdown(f"""
+                <div style="background: #F8FAFC; border: 1px solid #E2E8F0; border-left: 5px solid #2563EB; border-radius: 8px; padding: 12px 18px; margin-bottom: 15px; box-shadow: 0 1px 3px rgba(0,0,0,0.02);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap;">
+                        <div>
+                            <span style="font-size: 1.25rem; font-weight: 700; color: #1E293B;">{stock_row['종목명']}</span>
+                            <span style="color: #64748B; font-size: 0.95rem; margin-left: 8px;">({selected_ticker}) · {stock_row.get('섹터', 'Technology')}</span>
+                        </div>
+                        <div>
+                            <span style="background: #EFF6FF; color: #2563EB; font-weight: 700; font-size: 0.9rem; padding: 4px 10px; border-radius: 6px; margin-right: 8px;">{stock_row.get('현재_단계', '2단계')}</span>
+                            <span style="font-size: 1.2rem; font-weight: 700; color: #0F172A;">{curr_price_str}</span>
+                        </div>
+                    </div>
+                    <div style="margin-top: 8px; font-size: 0.92rem; color: #334155;">
+                        💡 <b>전략 행동 제언</b>: <span style="color: #2563EB; font-weight: 700;">{stock_row.get('전략제언', '보유')}</span> &nbsp;|&nbsp; 
+                        <b>권장 비중</b>: <b>{stock_row.get('최종비중(%)', '4.0%')}</b> ({stock_row.get('매수수량', '0주')}) &nbsp;|&nbsp;
+                        <b>재무 등급</b>: <b>{stock_row.get('재무등급', stock_row.get('등급', '🟢 Pass'))}</b> (ROE: {stock_row.get('ROE(%)', 12.0)}%, 이익성장: {stock_row.get('이익성장(%)', 10.0)}%)
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                # --------------------------------------------------------------
+                # 2. 📊 미너비니 4대 핵심 퀀트 지표 메트릭 카드
+                # --------------------------------------------------------------
+                v1, v2, v3, v4 = st.columns(4)
+                
+                disp_val = stock_row.get('피벗거리(%)', 0.0)
+                pivot_dist = stock_row.get('피벗돌파율(%)', 0.0)
+                with v1:
+                    st.metric(
+                        label="🎯 피벗/20일선 이격도",
+                        value=f"{disp_val:+.1f}%",
+                        delta=f"피벗 돌파율: {pivot_dist:+.1f}% (적정 < 5%)",
+                        delta_color="normal" if 0 <= disp_val <= 3.5 else "inverse"
+                    )
+                
+                vol_r = stock_row.get('거래량배수', 1.0)
+                is_dry = stock_row.get('거래량고갈', False)
+                with v2:
+                    st.metric(
+                        label="🔊 거래량 파워 (Vol Ratio)",
+                        value=f"{vol_r:.2f}배",
+                        delta="거래량 마른 눌림목" if is_dry else ("거래량 급증 돌파" if vol_r >= 1.3 else "평균 거래량"),
+                        delta_color="normal" if (is_dry or vol_r >= 1.3) else "off"
+                    )
+
+                is_vcp = stock_row.get('VCP수축', False)
+                is_pivot = stock_row.get('피벗초입돌파', False)
+                with v3:
+                    vcp_status = "💎 VCP 수축 완성" if is_vcp else ("🔥 피벗 초입 돌파" if is_pivot else "수축 진행 중")
+                    st.metric(
+                        label="⚡ VCP 변동성 수축",
+                        value=vcp_status,
+                        delta=f"트렌드: {stock_row.get('트렌드_템플릿', 'PASS')}"
+                    )
+
+                stop_price = stock_row.get('손절라인', float(stock_row.get('현재가', 100.0)) * 0.93)
+                stop_str = f"{int(stop_price):,}원" if str(selected_ticker).isdigit() else f"${stop_price:,.2f}"
+                with v4:
+                    win_pct = int(stock_row.get('승률', 0.45) * 100)
+                    payoff = stock_row.get('손익비', 1.2)
+                    st.metric(
+                        label="🛡️ 안전 버퍼 손절선 (-7%)",
+                        value=stop_str,
+                        delta=f"승률 {win_pct}% (손익비 {payoff:.1f})",
+                        delta_color="inverse"
+                    )
+
+                # --------------------------------------------------------------
+                # 3. 📋 SEPA 8대 트렌드 템플릿 정밀 체크리스트
+                # --------------------------------------------------------------
+                st.markdown("##### 📋 SEPA 8대 트렌드 템플릿 정밀 진단 체크리스트")
+                
+                c_c1, c_c2 = st.columns(2)
+                
+                c1 = stock_row.get('c1', True)
+                c2 = stock_row.get('c2', True)
+                c3 = stock_row.get('c3', True)
+                c4 = stock_row.get('c4', True)
+                c5 = stock_row.get('c5', True)
+                c6 = stock_row.get('c6', True)
+                c7 = stock_row.get('c7', True)
+                c8 = stock_row.get('c8', True)
+
+                with c_c1:
+                    st.markdown(f"""
+                    - {'🟢' if c1 else '🔴'} **1. 주가 > 150일선 & 200일선**: {'조건 충족 (장기 우상향)' if c1 else '조건 미달 (하회)'}
+                    - {'🟢' if c2 else '🔴'} **2. 150일선 > 200일선**: {'정배열 유지 (중장기 상승 국면)' if c2 else '역배열 (장기 침체)'}
+                    - {'🟢' if c3 else '🔴'} **3. 200일선 1개월 추세**: {'우상향 지속 (상승 추세 확립)' if c3 else '하향세 (추세 훼손)'}
+                    - {'🟢' if c4 else '🔴'} **4. 50일선 > 150/200일선**: {'단중기 정배열 (에너지 집중)' if c4 else '이평선 역배열'}
+                    """)
+                with c_c2:
+                    st.markdown(f"""
+                    - {'🟢' if c5 else '🔴'} **5. 52주 신저가 대비 반등**: {'+25% 이상 강한 회복 (바닥 탈출)' if c5 else '바닥권 횡보'}
+                    - {'🟢' if c6 else '🔴'} **6. 52주 신고가 근접도**: {'신고가 대비 -25% 이내 위치' if c6 else '고점 대비 과도한 낙폭'}
+                    - {'🟢' if c7 else '🔴'} **7. 벤치마크 상대강도(RS)**: {'S&P500 대비 6주간 RS 우상향' if c7 else '시장 대비 상대적 약세'}
+                    - {'🟢' if c8 else '🔴'} **8. 50일선 지지 여부**: {'주가 > 50일선 (단기 추세 건전)' if c8 else '50일선 하회'}
+                    """)
+
+                # --------------------------------------------------------------
+                # 4. 📈 심층 캔들스틱 및 거래량 이동평균 차트
+                # --------------------------------------------------------------
                 if df_stock is not None and not df_stock.empty:
                     # MultiIndex 또는 비정규 컬럼 방어적 정규화
                     if isinstance(df_stock.columns, pd.MultiIndex):
@@ -606,12 +983,12 @@ with tab_scanner:
                         df_stock_calc['MA150'] = df_stock_calc['Close'].rolling(150, min_periods=20).mean() if len(df_stock_calc) >= 150 else None
                         df_stock_calc['MA200'] = df_stock_calc['Close'].rolling(200, min_periods=30).mean() if len(df_stock_calc) >= 200 else None
 
-                        fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA20'], line=dict(color='#F59E0B', width=1.5), name='MA20'), row=1, col=1)
-                        fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA50'], line=dict(color='#3B82F6', width=1.5), name='MA50'), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA20'], line=dict(color='#F59E0B', width=1.5), name='MA20 (단기)'), row=1, col=1)
+                        fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA50'], line=dict(color='#3B82F6', width=1.5), name='MA50 (중기)'), row=1, col=1)
                         if 'MA150' in df_stock_calc and df_stock_calc['MA150'] is not None:
-                            fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA150'], line=dict(color='#8B5CF6', width=1.5), name='MA150'), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA150'], line=dict(color='#8B5CF6', width=1.5), name='MA150 (장기)'), row=1, col=1)
                         if 'MA200' in df_stock_calc and df_stock_calc['MA200'] is not None:
-                            fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA200'], line=dict(color='#EF4444', width=2), name='MA200'), row=1, col=1)
+                            fig.add_trace(go.Scatter(x=df_stock_calc.index, y=df_stock_calc['MA200'], line=dict(color='#EF4444', width=2), name='MA200 (추세 기준선)'), row=1, col=1)
 
                         vol_col = 'Volume' if 'Volume' in df_stock.columns else None
                         if vol_col:
@@ -636,7 +1013,7 @@ with tab_scanner:
 
 
 # ==============================================================================
-# 탭 3: [백테스팅] 10년 과거 검증 시뮬레이터
+# 탭 4: [백테스팅] 10년 과거 검증 시뮬레이터
 # ==============================================================================
 with tab_backtest:
     st.subheader("📊 마크 미너비니 SEPA & 정밀 VCP 백테스팅 시뮬레이터")
