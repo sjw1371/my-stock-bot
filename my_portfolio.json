@@ -2,29 +2,29 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 383564,
+      "cash_krw": 162794,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "360750.KS",
           "name": "TIGER 미국S&P500",
-          "shares": 120,
-          "avg_price": 25485,
+          "shares": 122,
+          "avg_price": 25493,
           "dividend_yield": 1.3,
           "target_weight": 0.35
         },
         {
           "ticker": "487230.KS",
           "name": "KODEX 미국AI전력핵심인프라",
-          "shares": 165,
-          "avg_price": 23070,
+          "shares": 170,
+          "avg_price": 22982,
           "dividend_yield": 0.5,
           "target_weight": 0.2
         },
         {
           "ticker": "402970.KS",
           "name": "ACE 미국배당다우존스",
-          "shares": 186,
+          "shares": 189,
           "avg_price": 14210,
           "dividend_yield": 3.8,
           "target_weight": 0.2
@@ -40,8 +40,8 @@
         {
           "ticker": "0053L0.KS",
           "name": "TIGER 차이나휴머노이드로봇",
-          "shares": 253,
-          "avg_price": 11960,
+          "shares": 256,
+          "avg_price": 11921,
           "dividend_yield": 0.0,
           "target_weight": 0.1
         },
@@ -159,22 +159,22 @@
     },
     "ISA": {
       "type": "장기적립",
-      "cash_krw": 446865,
+      "cash_krw": 264633,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "368590.KS",
           "name": "RISE 미국나스닥100",
-          "shares": 123,
-          "avg_price": 30637,
+          "shares": 126,
+          "avg_price": 30642,
           "dividend_yield": 0.6,
           "target_weight": 0.6
         },
         {
           "ticker": "446720.KS",
           "name": "SOL 미국배당다우존스",
-          "shares": 169,
-          "avg_price": 13891,
+          "shares": 176,
+          "avg_price": 13849,
           "dividend_yield": 3.8,
           "target_weight": 0.4
         }
