@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 162794,
+      "cash_krw": 145950,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -40,8 +40,8 @@
         {
           "ticker": "0053L0.KS",
           "name": "TIGER 차이나휴머노이드로봇",
-          "shares": 256,
-          "avg_price": 11921,
+          "shares": 270,
+          "avg_price": 11735,
           "dividend_yield": 0.0,
           "target_weight": 0.1
         },
@@ -57,7 +57,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 636205,
+      "cash_krw": 145278,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -79,8 +79,8 @@
         {
           "ticker": "0035T0.KS",
           "name": "PLUS 글로벌휴머노이드로봇액티브",
-          "shares": 110,
-          "avg_price": 20825,
+          "shares": 115,
+          "avg_price": 20750,
           "dividend_yield": 0.0,
           "target_weight": 0.3
         }
@@ -88,8 +88,8 @@
     },
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
-      "cash_krw": 91726,
-      "cash_usd": 68.25,
+      "cash_krw": 0,
+      "cash_usd": 670.63,
       "holdings": [
         {
           "ticker": "FAST",
@@ -116,22 +116,6 @@
           "target_weight": 0.15
         },
         {
-          "ticker": "TLN",
-          "name": "탈렌에너지 (TLN)",
-          "shares": 3.0,
-          "avg_price": 336.22,
-          "dividend_yield": 0.0,
-          "target_weight": 0.1
-        },
-        {
-          "ticker": "DXCM",
-          "name": "덱스컴 (DXCM)",
-          "shares": 11.0,
-          "avg_price": 88.6,
-          "dividend_yield": 0.0,
-          "target_weight": 0.1
-        },
-        {
           "ticker": "AES",
           "name": "AES (AES)",
           "shares": 35.0,
@@ -154,6 +138,14 @@
           "avg_price": 39.23,
           "dividend_yield": 0.0,
           "target_weight": 0.05
+        },
+        {
+          "ticker": "EXPD",
+          "name": "익스페디터스",
+          "shares": 8.34,
+          "avg_price": 192.31,
+          "dividend_yield": 0.8,
+          "target_weight": 0.1
         }
       ]
     },
