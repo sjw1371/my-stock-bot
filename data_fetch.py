@@ -305,20 +305,47 @@ def fetch_universe_tickers(select_mode: str, raw_input_tickers: str = "") -> lis
 def fetch_macro_data() -> dict:
     """
     Stage 0 거시경제 지표 수집:
-    - VIX 지수
-    - 4대 벤치마크 (S&P 500, Nasdaq, KOSPI, KOSDAQ) 최근 250일 데이터
+    - 실시간 VIX 공포지수 및 전일 대비 변동폭/변동률
+    - 4대 주요 지수 (S&P 500, Nasdaq, KOSPI, KOSDAQ) 최근 250일 데이터
     """
     macro_data = {
-        'vix': 21.51,
+        'vix': 19.5,
+        'vix_change': 0.0,
+        'vix_change_pct': 0.0,
+        'vix_prev_close': 19.5,
         'indices': {}
     }
 
     try:
-        vix_df = yf.Ticker('^VIX').history(period='5d')
+        vix_tk = yf.Ticker('^VIX')
+        # 1. fast_info 실시간 시세 우선 수집
+        curr_vix = None
+        prev_close = None
+        try:
+            curr_vix = float(vix_tk.fast_info.last_price)
+            prev_close = float(vix_tk.fast_info.previous_close)
+        except Exception:
+            pass
+
+        # 2. fast_info 실패 시 history(5d)에서 수집
+        vix_df = vix_tk.history(period='5d')
         if not vix_df.empty and 'Close' in vix_df:
-            macro_data['vix'] = float(vix_df['Close'].dropna().iloc[-1])
-    except Exception:
-        pass
+            closes = vix_df['Close'].dropna()
+            if len(closes) >= 1:
+                if curr_vix is None or pd.isna(curr_vix):
+                    curr_vix = float(closes.iloc[-1])
+                if prev_close is None or pd.isna(prev_close):
+                    prev_close = float(closes.iloc[-2]) if len(closes) >= 2 else curr_vix
+
+        if curr_vix is not None and curr_vix > 0:
+            macro_data['vix'] = round(curr_vix, 2)
+            if prev_close and prev_close > 0:
+                macro_data['vix_prev_close'] = round(prev_close, 2)
+                chg = curr_vix - prev_close
+                macro_data['vix_change'] = round(chg, 2)
+                macro_data['vix_change_pct'] = round((chg / prev_close) * 100.0, 2)
+    except Exception as e:
+        safe_print(f"   [안내] VIX 수집 예외 발생: {e}")
 
     indices_map = {
         'S&P 500': '^GSPC',

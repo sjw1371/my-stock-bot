@@ -72,12 +72,56 @@ def evaluate_macro(macro_data: dict) -> tuple:
 
     avg_score = sum(scores) / len(scores) if scores else 1.50
 
-    if avg_score >= 2.5 and vix < 22:
-        market_status = "🟢 ON"
-    elif avg_score >= 1.5 and vix < 28:
-        market_status = "🟡 CAUTION"
+    # 1. 미국(US) 및 국내(KR) 지수 스코어 분해
+    us_scores = [indices_summary[name]['score'] for name in ['S&P 500', 'Nasdaq'] if name in indices_summary]
+    kr_scores = [indices_summary[name]['score'] for name in ['KOSPI', 'KOSDAQ'] if name in indices_summary]
+
+    us_score = sum(us_scores) / len(us_scores) if us_scores else 2.0
+    kr_score = sum(kr_scores) / len(kr_scores) if kr_scores else 2.0
+
+    # 2. VIX 상세 분석
+    vix_chg = macro_data.get('vix_change', 0.0)
+    vix_chg_pct = macro_data.get('vix_change_pct', 0.0)
+    if vix < 18.0:
+        vix_level = "🟢 안정/평온 (낮은 변동성)"
+        vix_advice = "지수 변동성이 안정되어 추세 추종 및 VCP 돌파 매매에 가장 유리한 환경입니다."
+    elif vix < 25.0:
+        vix_level = "🟡 경계/확대 (단기 흔들림 주의)"
+        vix_advice = "변동성이 확대되고 있으므로 무리한 추격 매수를 금지하고 진입 비중을 조절하십시오."
     else:
-        market_status = "🔴 OFF (신규 매수 셧다운)"
+        vix_level = "🔴 공포/패닉 (위험 극대화)"
+        vix_advice = "시장 패닉 및 투매 구간입니다. 모든 신규 매수를 중단하고 현금을 확보하십시오."
+
+    vix_info = {
+        'value': vix,
+        'change': vix_chg,
+        'change_pct': vix_chg_pct,
+        'level': vix_level,
+        'advice': vix_advice
+    }
+
+    # 3. 글로벌 시장 상태 정밀 판정
+    if avg_score >= 2.5 and vix < 20.0:
+        market_status = "🟢 ON (강세 상승 국면)"
+        market_status_desc = f"주요 벤치마크 지수(종합 {avg_score:.2f}점 / 미국 {us_score:.1f}점, 국내 {kr_score:.1f}점)가 50일/200일선 위에 안정적으로 정배열되어 있으며, VIX({vix:.1f})가 안정권에 머물고 있습니다."
+        market_action_guide = "🔥 [적극 공격 모드] 주도 섹터 1등주에 100% 정상 비중으로 진입하십시오. VCP 피벗 초입 돌파(+0~2.5%) 종목을 최우선 매수하고 거래량 급증 시 피라미딩(불타기)이 유효합니다."
+    elif avg_score >= 1.5 and vix < 26.0:
+        market_status = "🟡 CAUTION (주의/관망 국면)"
+        market_status_desc = f"일부 지수(종합 {avg_score:.2f}점 / 미국 {us_score:.1f}점, 국내 {kr_score:.1f}점)의 20일선 단기 추세가 흔들리거나 VIX({vix:.1f})가 경계선에 도달하여 시장 방향성이 혼조세를 보이고 있습니다."
+        market_action_guide = "⚠️ [선별 방어 모드] 신규 매수 포지션 크기를 평소의 50% 수준으로 축소하십시오. 20일선 거래량이 마른 눌림목 지지 등 최상위 저위험 타점만 선별 접근하고 수익 중인 종목은 분할 익절하십시오."
+    else:
+        market_status = "🔴 OFF (하락장 셧다운)"
+        market_status_desc = f"글로벌 지수(종합 {avg_score:.2f}점)가 중장기 이평선(50일/200일선)을 하향 이탈했거나, VIX({vix:.1f})가 공포 구간에 진입하여 시스템 리스크가 가중되었습니다."
+        market_action_guide = "🚨 [비상 셧다운 모드] 마크 미너비니 원칙에 따라 신규 매수를 전면 중단(Hard Stop)하십시오. 보유 종목은 -7% 안전 버퍼 손절선을 칼같이 엄수하고 100% 현금을 보존하십시오."
+
+    indices_summary['meta'] = {
+        'avg_score': avg_score,
+        'us_score': us_score,
+        'kr_score': kr_score,
+        'vix_info': vix_info,
+        'market_status_desc': market_status_desc,
+        'market_action_guide': market_action_guide
+    }
 
     return avg_score, market_status, vix, detail_logs, indices_summary
 

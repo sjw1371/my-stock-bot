@@ -323,7 +323,16 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             })
 
         acc_total_eval_krw = acc_eval_stock_krw + total_acc_cash_krw
-        acc_total_cost_krw = acc_cost_stock_krw + total_acc_cash_krw
+        
+        # 순투입원금(순입금액) 기반 원금 정확 계산 (미입력 시 주식매수가+현금 fallback)
+        acc_net_deposit = float(acc_info.get("net_deposit", 0.0))
+        if acc_net_deposit > 0:
+            acc_total_cost_krw = acc_net_deposit
+            acc_cost_type = "순입금액 기준 (정확)"
+        else:
+            acc_total_cost_krw = acc_cost_stock_krw + total_acc_cash_krw
+            acc_cost_type = "보유주식 매수원가+현금"
+
         acc_pnl_krw = acc_total_eval_krw - acc_total_cost_krw
         acc_return_pct = (acc_pnl_krw / acc_total_cost_krw) * 100 if acc_total_cost_krw > 0 else 0.0
 

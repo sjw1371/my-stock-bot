@@ -42,7 +42,11 @@ from strategy import (
     evaluate_fundamentals,
     calculate_portfolio_allocation
 )
-from backtest import run_single_stock_backtest
+from backtest import (
+    run_single_stock_backtest,
+    run_portfolio_historical_backtest,
+    run_future_wealth_projection
+)
 from portfolio_manager import (
     load_portfolio_data,
     save_portfolio_data,
@@ -200,7 +204,7 @@ tab_my_account, tab_allocator, tab_scanner, tab_backtest = st.tabs([
     "💼 [내 계좌] 실시간 종합 관리 & AI 맞춤 진단",
     "🧭 [자산 배분] Dual-Lens 포트폴리오 빌더 & What-If",
     "📡 [시장 스캐너] SEPA 트렌드 & 정밀 VCP",
-    "📊 [백테스팅] 10년 과거 검증 시뮬레이터"
+    "📈 [백테스팅 & 복리] 10년 과거 검증 & 미래 부 시뮬레이터"
 ])
 
 
@@ -751,48 +755,107 @@ with tab_scanner:
     results = st.session_state.get('results')
 
     if results:
-        if "🔴" in results['market_status']:
-            st.error("🚨 **[시장 하락장 자동 셧다운 발동]** 글로벌 벤치마크 지수가 20일/50일선 아래로 꺾인 위험 구간입니다. 마크 미너비니 원칙에 따라 **신규 매수를 전면 중단하고 100% 현금을 보존**하십시오.")
-        elif "🟡" in results['market_status']:
-            st.warning("⚠️ **[시장 주의 관망 구간]** 지수 단기 추세가 흔들리고 있습니다. 투자 비중을 50%로 자동 축소하고 엄격한 손익비 타점에서만 접근합니다.")
+        macro_meta = results['indices_summary'].get('meta', {})
+        us_sc = macro_meta.get('us_score', 2.0)
+        kr_sc = macro_meta.get('kr_score', 2.0)
+        vix_meta = macro_meta.get('vix_info', {})
+        status_desc = macro_meta.get('market_status_desc', "글로벌 벤치마크 지수와 VIX 공포지수를 종합 분석한 실시간 결과입니다.")
+        action_guide = macro_meta.get('market_action_guide', "시장 추세를 확인 후 분할 매수로 접근하십시오.")
 
-        st.subheader("📡 Stage 0: 글로벌 거시 경제 통합 필터")
-        col1, col2, col3, col4, col5 = st.columns([1.2, 1.2, 1, 1, 1])
+        # ----------------------------------------------------------------------
+        # 🌟 글로벌 시장 상태 상세 설명 & 마크 미너비니 행동 지침 배너
+        # ----------------------------------------------------------------------
+        if "🔴" in results['market_status']:
+            banner_bg = "#FEF2F2"
+            banner_border = "#EF4444"
+            banner_title_color = "#991B1B"
+        elif "🟡" in results['market_status']:
+            banner_bg = "#FFFBEB"
+            banner_border = "#F59E0B"
+            banner_title_color = "#92400E"
+        else:
+            banner_bg = "#F0FDF4"
+            banner_border = "#10B981"
+            banner_title_color = "#065F46"
+
+        st.markdown(f"""
+        <div style="background: {banner_bg}; border: 1px solid {banner_border}; border-left: 6px solid {banner_border}; border-radius: 8px; padding: 14px 18px; margin-bottom: 16px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <span style="font-size: 1.15rem; font-weight: 700; color: {banner_title_color};">🌐 글로벌 시장 상태: {results['market_status']}</span>
+                <span style="font-size: 0.85rem; font-weight: 600; color: #64748B;">기준: 4대 지수 50/200일선 정배열 + 실시간 VIX 복합 평가</span>
+            </div>
+            <div style="font-size: 0.93rem; color: #1E293B; margin-bottom: 6px; line-height: 1.5;">
+                📌 <b>상태 분석 근거</b>: {status_desc}
+            </div>
+            <div style="font-size: 0.93rem; color: #1E293B; line-height: 1.5;">
+                💡 <b>미너비니 실전 행동 지침</b>: <b>{action_guide}</b>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ----------------------------------------------------------------------
+        # 📊 종합 지수 스코어 분해 & VIX 실시간 분석 5대 메트릭 카드
+        # ----------------------------------------------------------------------
+        st.subheader("📡 Stage 0: 글로벌 거시 경제 통합 필터 & 지수 분해")
+        col1, col2, col3, col4, col5 = st.columns([1.1, 1.1, 1.1, 1.3, 1.1])
 
         with col1:
             st.metric(
-                label="🌐 글로벌 시장 상태",
-                value=results['market_status'],
-                delta="정상 가동" if "🟢" in results['market_status'] else ("주의 관망" if "🟡" in results['market_status'] else "매수 셧다운")
-            )
-        with col2:
-            st.metric(
-                label="📊 종합 지수 스코어",
+                label="🌐 글로벌 종합 스코어",
                 value=f"{results['market_score']:.2f} / 3.00",
                 delta=f"{(results['market_score']/3.0)*100:.0f}% 달성"
             )
-        with col3:
-            vix_val = results['vix']
-            vix_desc = "안정" if vix_val < 20 else "고위험"
+        with col2:
             st.metric(
-                label="📉 VIX 공포지수",
-                value=f"{vix_val:.2f}",
-                delta=vix_desc,
-                delta_color="inverse" if vix_val >= 20 else "normal"
+                label="🇺🇸 미국 시장 스코어",
+                value=f"{us_sc:.2f} / 3.00",
+                delta="S&P 500 + 나스닥"
+            )
+        with col3:
+            st.metric(
+                label="🇰🇷 국내 시장 스코어",
+                value=f"{kr_sc:.2f} / 3.00",
+                delta="코스피 + 코스닥"
             )
         with col4:
+            vix_val = results['vix']
+            vix_chg = vix_meta.get('change', 0.0)
+            vix_pct = vix_meta.get('change_pct', 0.0)
+            vix_lvl = vix_meta.get('level', "정상")
             st.metric(
-                label="🎯 분석 대상 시장",
-                value=select_mode.split('.')[-1].strip(),
-                delta=f"총 {len(results['tickers'])}개 종목 전수 스캔"
+                label="📉 VIX 공포지수 (실시간)",
+                value=f"{vix_val:.2f}",
+                delta=f"{vix_chg:+.2f} ({vix_pct:+.1f}%) | {vix_lvl.split()[0]}",
+                delta_color="inverse" if vix_chg >= 0 else "normal"
             )
         with col5:
             total_rec = len(results['final_df']) if results['final_df'] is not None else 0
             st.metric(
-                label="🏆 추천 종목 수",
-                value=f"{total_rec}개 종목",
-                delta="포트폴리오 구성"
+                label="🎯 분석 대상 / 추천수",
+                value=f"{total_rec}개 추천",
+                delta=f"총 {len(results['tickers'])}개 전수 스캔"
             )
+
+        # 4대 지수 정밀 진단 현황표
+        with st.expander("🔍 4대 주요 벤치마크 지수 (S&P500, 나스닥, 코스피, 코스닥) 상세 이평선 진단표 확인", expanded=False):
+            idx_rows = []
+            for idx_name, idx_data in results['indices_summary'].items():
+                if idx_name == 'meta':
+                    continue
+                idx_rows.append({
+                    "지수명": idx_name,
+                    "현재가": f"{idx_data['curr']:,.2f}",
+                    "20일선(단기)": f"{idx_data['ma20']:,.2f}",
+                    "50일선(중기)": f"{idx_data['ma50']:,.2f}",
+                    "200일선(장기)": f"{idx_data['ma200']:,.2f}",
+                    "주가>50선": "✅ PASS" if idx_data['s1'] == 1 else "❌ FAIL",
+                    "주가>200선": "✅ PASS" if idx_data['s2'] == 1 else "❌ FAIL",
+                    "50선>200선(정배열)": "✅ PASS" if idx_data['s3'] == 1 else "❌ FAIL",
+                    "지수 스코어": f"{idx_data['score']}.0 / 3.0",
+                    "상태 진단": idx_data['status']
+                })
+            if idx_rows:
+                st.dataframe(pd.DataFrame(idx_rows), use_container_width=True, hide_index=True)
 
         st.markdown("---")
         st.subheader(f"🏆 AI 퀀트 추천 포트폴리오 [선택 시장: {select_mode} | 매수 전략: {strategy_mode}]")
@@ -1013,120 +1076,380 @@ with tab_scanner:
 
 
 # ==============================================================================
-# 탭 4: [백테스팅] 10년 과거 검증 시뮬레이터
+# 탭 4: [백테스팅 & 복리] 10년 과거 검증 & 미래 부 시뮬레이터
 # ==============================================================================
 with tab_backtest:
-    st.subheader("📊 마크 미너비니 SEPA & 정밀 VCP 백테스팅 시뮬레이터")
-    st.markdown("과거 실제 시세 데이터를 바탕으로 **안전 버퍼 손절매(-7%) & 피벗 초입 돌파(+0~2.5%) & 20일선 거래량 마른 눌림목 지지 매수** 전략의 실제 수익률을 정밀 검증합니다.")
+    st.subheader("📈 10년 자산 백테스팅 & 미래 복리 부(Wealth) 시뮬레이터")
+    st.markdown("과거 10년의 팩터 자산 성장 궤적을 실증하고, 향후 10년간 복리 적립과 배당 재투자로 형성되는 **월 배당 현금흐름 파이프라인**을 정밀 시뮬레이션합니다.")
 
-    bt_col1, bt_col2, bt_col3, bt_col4 = st.columns(4)
-    with bt_col1:
-        bt_ticker = st.selectbox(
-            "백테스트 종목 선택",
-            options=["000660", "NVDA", "CRWD", "MSFT", "AAPL", "005930", "직접입력"],
-            index=0
-        )
-        if bt_ticker == "직접입력":
-            bt_ticker = st.text_input("직접 티커 입력", value="GOOGL").strip().upper()
+    # 사용자 계좌 자산 로드 (기본 자산 산정용)
+    if 'my_analysis' not in locals():
+        raw_p_data = load_portfolio_data()
+        my_analysis = analyze_my_portfolio(raw_p_data)
+    default_init_capital = int(my_analysis.get('total_net_worth', 39000000)) if my_analysis.get('total_net_worth', 0) > 0 else 39000000
 
-    with bt_col2:
-        bt_period = st.selectbox("백테스트 기간", ["1y", "2y", "3y", "5y", "10y"], index=2)
+    sub_bt1, sub_bt2, sub_bt3 = st.tabs([
+        "🧭 [과거 10년 검증] 6대 자산 팩터 포트폴리오 백테스트",
+        "🌱 [미래 10년 부] 정기 적립 & 배당 재투자 복리 시뮬레이터",
+        "🔍 [개별 종목 검증] SEPA 8대 조건 & 마크 미너비니 VCP 백테스트"
+    ])
 
-    with bt_col3:
-        bt_stop_loss = st.selectbox("손절매 기준 (Stop-Loss)", [-0.05, -0.06, -0.07, -0.08, -0.10], index=2, format_func=lambda x: f"{x*100:.0f}%")
+    # --------------------------------------------------------------------------
+    # 서브탭 1: 6대 자산 팩터 포트폴리오 과거 10년 백테스팅
+    # --------------------------------------------------------------------------
+    with sub_bt1:
+        st.markdown("#### 🧭 내 6대 자산 팩터 포트폴리오 과거 실증 백테스트")
+        st.caption("내 포트폴리오의 6대 핵심 팩터(글로벌 코어, 고배당 인컴, 테마 혁신, 퀀트 스윙, 코인, 현금)를 실제 시장 데이터(S&P500, SCHD, QQQ, MTUM, BTC, 현금수익)와 합성하여 지난 3~10년 동안의 연평균 복리(CAGR), 최대 낙폭(MDD), 샤프 지수를 정밀 검증합니다.")
 
-    with bt_col4:
-        bt_capital_bt = st.number_input("시뮬레이션 초기 자산 (원)", min_value=1000000, max_value=1000000000, value=10000000, step=1000000)
-
-    bt_run_btn = st.button("🚀 백테스트 실행하기", type="primary", use_container_width=True)
-
-    if bt_run_btn or 'bt_result' not in st.session_state:
-        with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 SEPA 백테스트 시뮬레이션 계산 중..."):
-            st.session_state['bt_result'] = run_single_stock_backtest(
-                ticker=bt_ticker,
-                period=bt_period,
-                initial_capital=bt_capital_bt,
-                stop_loss_pct=abs(bt_stop_loss)
+        p_col1, p_col2, p_col3 = st.columns([1.2, 1, 1.8])
+        with p_col1:
+            p_initial_cap = st.number_input(
+                "초기 투자 원금 (원)",
+                min_value=1000000,
+                max_value=2000000000,
+                value=default_init_capital,
+                step=1000000,
+                key="p_initial_cap"
+            )
+        with p_col2:
+            p_period = st.selectbox(
+                "검증 기간 선택",
+                options=["3y", "5y", "10y"],
+                index=1,
+                key="p_period"
+            )
+        with p_col3:
+            strategy_preset = st.selectbox(
+                "자산 배분 모델 선택",
+                options=[
+                    "내 현재 계좌 실제 비중 반영",
+                    "🏆 JTI 권장 올웨더 균형형 (코어35/배당30/테마15/스윙10/코인2/현금8)",
+                    "💰 고배당 인컴 방어형 (배당50/코어25/현금15/테마5/스윙5)",
+                    "🚀 테크 & 성장 모멘텀형 (테마35/코어30/스윙20/현금15)"
+                ],
+                index=0,
+                key="strategy_preset"
             )
 
-    bt_res = st.session_state.get('bt_result')
+        # 배분 가중치 설정
+        if strategy_preset == "내 현재 계좌 실제 비중 반영":
+            current_w = my_analysis.get('category_weights', {})
+            total_w = sum(current_w.values())
+            if total_w > 0:
+                calc_weights = {k: v / total_w for k, v in current_w.items()}
+            else:
+                calc_weights = {
+                    "🌱 글로벌 코어 지수": 0.35, "💰 고배당 & 인컴": 0.30,
+                    "🤖 테마 & 미래혁신": 0.15, "🚀 퀀트 스윙 & 모멘텀": 0.10,
+                    "🪙 대체자산 (코인)": 0.02, "💵 안전 현금": 0.08
+                }
+        elif "고배당" in strategy_preset:
+            calc_weights = {
+                "🌱 글로벌 코어 지수": 0.25, "💰 고배당 & 인컴": 0.50,
+                "🤖 테마 & 미래혁신": 0.05, "🚀 퀀트 스윙 & 모멘텀": 0.05,
+                "🪙 대체자산 (코인)": 0.00, "💵 안전 현금": 0.15
+            }
+        elif "테크" in strategy_preset:
+            calc_weights = {
+                "🌱 글로벌 코어 지수": 0.30, "💰 고배당 & 인컴": 0.00,
+                "🤖 테마 & 미래혁신": 0.35, "🚀 퀀트 스윙 & 모멘텀": 0.20,
+                "🪙 대체자산 (코인)": 0.00, "💵 안전 현금": 0.15
+            }
+        else:
+            calc_weights = {
+                "🌱 글로벌 코어 지수": 0.35, "💰 고배당 & 인컴": 0.30,
+                "🤖 테마 & 미래혁신": 0.15, "🚀 퀀트 스윙 & 모멘텀": 0.10,
+                "🪙 대체자산 (코인)": 0.02, "💵 안전 현금": 0.08
+            }
 
-    if bt_res:
-        st.markdown(f"### 🏆 백테스트 성과 분석 성적표: **{bt_res['stock_name']} ({bt_res['ticker']})** [기간: {bt_res['period']}]")
-        
-        m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
-        with m_col1:
-            st.metric(
-                label="💰 전략 총 수익률",
-                value=f"{bt_res['total_return_pct']:+.1f}%",
-                delta=f"단순보유: {bt_res['buyhold_return_pct']:+.1f}%"
+        p_run_btn = st.button("🚀 포트폴리오 백테스트 실행", type="primary", use_container_width=True, key="p_run_btn")
+
+        if p_run_btn or 'port_bt_cache' not in st.session_state:
+            with st.spinner("⏳ 6대 자산 팩터 및 벤치마크 과거 10년 시세 다운로드 & 포트폴리오 합성 분석 중..."):
+                st.session_state['port_bt_cache'] = run_portfolio_historical_backtest(
+                    initial_capital=p_initial_cap,
+                    period=p_period,
+                    category_weights=calc_weights
+                )
+
+        p_res = st.session_state.get('port_bt_cache')
+
+        if p_res:
+            st.markdown(f"### 🏆 포트폴리오 성과 분석 성적표 [검증 기간: 최근 {p_res['years']}년]")
+            pm1, pm2, pm3, pm4, pm5 = st.columns(5)
+            with pm1:
+                st.metric(
+                    label="💰 최종 평가 자산",
+                    value=f"{int(p_res['final_capital']):,}원",
+                    delta=f"{p_res['total_return_pct']:+.1f}% 누적수익"
+                )
+            with pm2:
+                st.metric(
+                    label="📈 연평균 복리(CAGR)",
+                    value=f"{p_res['cagr']:+.1f}%",
+                    delta=f"S&P 500: {p_res['spy_cagr']:+.1f}%"
+                )
+            with pm3:
+                st.metric(
+                    label="🛡️ 최대 낙폭 (MDD)",
+                    value=f"-{p_res['mdd']:.1f}%",
+                    delta=f"코스피: -{p_res['ks_mdd']:.1f}%",
+                    delta_color="inverse"
+                )
+            with pm4:
+                st.metric(
+                    label="⚖️ 샤프 지수 (위험대비)",
+                    value=f"{p_res['sharpe']:.2f}",
+                    delta=f"연 변동성 {p_res['annual_vol']:.1f}%"
+                )
+            with pm5:
+                st.metric(
+                    label="💵 누적 추정 배당수익",
+                    value=f"{int(p_res['est_total_dividend_paid']):,}원",
+                    delta=f"연 배당률 {p_res['weighted_div_yield']:.2f}%"
+                )
+
+            st.markdown("#### 📈 자산 성장 곡선 (Equity Curve vs S&P500 vs 코스피)")
+            chart_df = p_res['hist_chart_df']
+            fig_p = go.Figure()
+            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['내 포트폴리오'], mode='lines', name='내 포트폴리오', line=dict(color='#2563EB', width=2.5)))
+            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['S&P 500 (SPY)'], mode='lines', name='S&P 500 (SPY)', line=dict(color='#10B981', width=1.5, dash='dash')))
+            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['코스피 (KOSPI)'], mode='lines', name='코스피 (KOSPI)', line=dict(color='#F59E0B', width=1.5, dash='dot')))
+            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['투자 원금'], mode='lines', name='투자 원금선', line=dict(color='#9CA3AF', width=1.2, dash='dash')))
+            fig_p.update_layout(
+                height=420,
+                yaxis_title="자산 평가액 (원)",
+                margin=dict(t=20, b=20, l=20, r=20),
+                template="plotly_white",
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
             )
-        with m_col2:
-            st.metric(
-                label="📈 연평균 복리(CAGR)",
-                value=f"{bt_res['cagr']:+.1f}%"
-            )
-        with m_col3:
-            st.metric(
-                label="🛡️ 최대 낙폭 (MDD)",
-                value=f"-{bt_res['mdd']:.1f}%",
-                delta="리스크 방어력",
-                delta_color="inverse"
-            )
-        with m_col4:
-            st.metric(
-                label="🎯 승률 (Win Rate)",
-                value=f"{bt_res['win_rate']:.1f}%",
-                delta=f"총 {bt_res['total_trades']}회 매매"
-            )
-        with m_col5:
-            st.metric(
-                label="⚖️ 손익비 (Payoff Ratio)",
-                value=f"{bt_res['payoff_ratio']:.2f} : 1"
+            st.plotly_chart(fig_p, use_container_width=True)
+
+            st.markdown("#### 📅 연도별 성과 비교 성적표")
+            st.dataframe(pd.DataFrame(p_res['yearly_records']), use_container_width=True, hide_index=True)
+
+    # --------------------------------------------------------------------------
+    # 서브탭 2: 미래 10년 정기 적립 & 배당 재투자 복리 시뮬레이터
+    # --------------------------------------------------------------------------
+    with sub_bt2:
+        st.markdown("#### 🌱 미래 10년 부(Wealth)의 복리 적립 & 월 배당 파이프라인 시뮬레이터")
+        st.caption("초기 자산과 매월 추가 적립금, 연평균 자본 수익률 및 배당금 재투자가 맞물렸을 때, 10년 뒤 내 총자산과 '은퇴를 앞당기는 월 배당 현금흐름'이 얼마나 커지는지 정밀 시뮬레이션합니다.")
+
+        f_c1, f_c2, f_c3, f_c4 = st.columns(4)
+        with f_c1:
+            fut_init_cap = st.number_input("초기 투자 자본 (원)", min_value=1000000, max_value=2000000000, value=default_init_capital, step=1000000, key="fut_init_cap")
+        with f_c2:
+            fut_monthly_save = st.number_input("매월 정기 적립금 (원)", min_value=0, max_value=20000000, value=1000000, step=100000, key="fut_monthly_save")
+        with f_c3:
+            fut_cagr_est = st.slider("연 기대 자본수익률 (%)", min_value=1.0, max_value=25.0, value=10.5, step=0.5, key="fut_cagr_est")
+        with f_c4:
+            fut_div_est = st.slider("연 예상 배당수익률 (%)", min_value=0.0, max_value=12.0, value=3.2, step=0.1, key="fut_div_est")
+
+        f_sub1, f_sub2 = st.columns([1.5, 2.5])
+        with f_sub1:
+            fut_years_cnt = st.select_slider("시뮬레이션 목표 기간 (년)", options=[3, 5, 7, 10, 15, 20, 25, 30], value=10, key="fut_years_cnt")
+        with f_sub2:
+            fut_reinvest_opt = st.checkbox("🔄 수령 배당금 전액 자동 재투자 (복리 스노우볼 극대화)", value=True, key="fut_reinvest_opt")
+
+        fut_calc_btn = st.button("🌱 미래 복리 자산 시뮬레이션 계산", type="primary", use_container_width=True, key="fut_calc_btn")
+
+        if fut_calc_btn or 'fut_proj_cache' not in st.session_state:
+            st.session_state['fut_proj_cache'] = run_future_wealth_projection(
+                initial_capital=fut_init_cap,
+                monthly_contribution=fut_monthly_save,
+                annual_growth_rate=fut_cagr_est,
+                annual_dividend_yield=fut_div_est,
+                years=fut_years_cnt,
+                reinvest_dividend=fut_reinvest_opt
             )
 
-        st.markdown("### 📈 누적 자산 가치 곡선 (Equity Curve vs 단순보유)")
-        eq_df = bt_res['equity_df']
+        f_res = st.session_state.get('fut_proj_cache')
 
-        fig_eq = go.Figure()
-        fig_eq.add_trace(go.Scatter(
-            x=eq_df.index,
-            y=eq_df['Strategy'],
-            mode='lines',
-            name='JTI 퀀트 전략 자산',
-            line=dict(color='#2563EB', width=2.5)
-        ))
-        fig_eq.add_trace(go.Scatter(
-            x=eq_df.index,
-            y=eq_df['BuyHold'],
-            mode='lines',
-            name='단순 보유 (Buy & Hold)',
-            line=dict(color='#9CA3AF', width=1.5, dash='dot')
-        ))
-        fig_eq.update_layout(
-            height=400,
-            yaxis_title="계좌 총 평가액 (원/$)",
-            margin=dict(t=30, b=20, l=20, r=20),
-            template="plotly_white",
-            legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-        )
-        st.plotly_chart(fig_eq, use_container_width=True)
+        if f_res:
+            st.markdown(f"### 🎯 {fut_years_cnt}년 후 미래 자산 & 월 배당금 달성 예측")
+            fm1, fm2, fm3, fm4 = st.columns(4)
+            with fm1:
+                st.metric(
+                    label=f"🏁 {fut_years_cnt}년 후 총 예상 자산",
+                    value=f"{int(f_res['final_wealth']):,}원",
+                    delta=f"수익률 {(f_res['total_profit']/f_res['total_principal']*100):+.1f}%"
+                )
+            with fm2:
+                st.metric(
+                    label=f"💵 {fut_years_cnt}년 후 월 예상 배당금",
+                    value=f"월 {int(f_res['final_monthly_dividend']):,}원",
+                    delta=f"연간 {int(f_res['final_annual_dividend']):,}원 수령"
+                )
+            with fm3:
+                st.metric(
+                    label="🏦 총 납입 원금 (저축)",
+                    value=f"{int(f_res['total_principal']):,}원",
+                    delta="순수 투입 원금"
+                )
+            with fm4:
+                st.metric(
+                    label="📈 순수 복리 수익 (이자+배당)",
+                    value=f"+{int(f_res['total_profit']):,}원",
+                    delta=f"총 배당수령: {int(f_res['total_dividend_earned']):,}원"
+                )
 
-        st.markdown("### 🛡️ 계좌 낙폭 (Drawdown) 추이")
-        fig_dd = go.Figure()
-        fig_dd.add_trace(go.Scatter(
-            x=eq_df.index,
-            y=bt_res['drawdown_series'],
-            mode='lines',
-            fill='tozeroy',
-            name='낙폭 (%)',
-            line=dict(color='#EF4444', width=1.5),
-            fillcolor='rgba(239, 68, 68, 0.2)'
-        ))
-        fig_dd.update_layout(
-            height=240,
-            yaxis_title="낙폭 (%)",
-            margin=dict(t=20, b=20, l=20, r=20),
-            template="plotly_white"
-        )
-        st.plotly_chart(fig_dd, use_container_width=True)
+            st.markdown("#### 📊 복리 스노우볼 자산 성장 궤적 (원금 vs 복리 수익)")
+            p_df = f_res['proj_df']
+            fig_proj = go.Figure()
+            fig_proj.add_trace(go.Scatter(
+                x=p_df['date'], y=p_df['wealth'], mode='lines', name='기말 총 자산',
+                line=dict(color='#10B981', width=3), fill='tonexty'
+            ))
+            fig_proj.add_trace(go.Scatter(
+                x=p_df['date'], y=p_df['principal'], mode='lines', name='누적 납입 원금',
+                line=dict(color='#64748B', width=2), fill='tozeroy', fillcolor='rgba(100, 116, 139, 0.15)'
+            ))
+            fig_proj.update_layout(
+                height=400,
+                yaxis_title="자산 가치 (원)",
+                margin=dict(t=20, b=20, l=20, r=20),
+                template="plotly_white",
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+            )
+            st.plotly_chart(fig_proj, use_container_width=True)
+
+            # 재정적 자유 마일스톤 달성 타임라인
+            st.markdown("#### 🏆 경제적 자유(FIRE) 마일스톤 달성 타임라인")
+            ms = f_res['milestones']
+            m_col1, m_col2 = st.columns(2)
+            with m_col1:
+                st.markdown("**💵 월 배당금 파이프라인 달성 시점**")
+                st.write(f"- ☕ **월 50만 원 달성**: `{ms.get('월 배당 50만 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 🛒 **월 100만 원 달성**: `{ms.get('월 배당 100만 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 🏠 **월 200만 원 달성**: `{ms.get('월 배당 200만 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 🚀 **월 300만 원 달성**: `{ms.get('월 배당 300만 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 👑 **월 500만 원 달성**: `{ms.get('월 배당 500만 원 달성', '기간 내 달성 불가')}`")
+            with m_col2:
+                st.markdown("**🏦 총 자산 규모 달성 시점**")
+                st.write(f"- 🥉 **총 자산 1억 원 돌파**: `{ms.get('총 자산 1억 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 🥈 **총 자산 3억 원 돌파**: `{ms.get('총 자산 3억 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 🥇 **총 자산 5억 원 돌파**: `{ms.get('총 자산 5억 원 달성', '기간 내 달성 불가')}`")
+                st.write(f"- 💎 **총 자산 10억 원 돌파**: `{ms.get('총 자산 10억 원 달성', '기간 내 달성 불가')}`")
+
+            st.markdown("#### 📅 1년 단위 상세 적립 & 복리 성장 성적표")
+            st.dataframe(pd.DataFrame(f_res['yearly_summary']), use_container_width=True, hide_index=True)
+
+    # --------------------------------------------------------------------------
+    # 서브탭 3: 개별 종목 SEPA & VCP 기술적 백테스트
+    # --------------------------------------------------------------------------
+    with sub_bt3:
+        st.markdown("#### 🔍 개별 종목 마크 미너비니 SEPA & VCP 백테스팅")
+        st.caption("과거 실제 시세 데이터를 바탕으로 **안전 버퍼 손절매(-7%) & 피벗 초입 돌파(+0~2.5%) & 20일선 거래량 마른 눌림목 지지 매수** 전략의 실제 수익률을 정밀 검증합니다.")
+
+        bt_col1, bt_col2, bt_col3, bt_col4 = st.columns(4)
+        with bt_col1:
+            bt_ticker = st.selectbox(
+                "백테스트 종목 선택",
+                options=["000660", "NVDA", "CRWD", "MSFT", "AAPL", "005930", "직접입력"],
+                index=0,
+                key="bt_single_ticker"
+            )
+            if bt_ticker == "직접입력":
+                bt_ticker = st.text_input("직접 티커 입력", value="GOOGL", key="bt_single_custom").strip().upper()
+
+        with bt_col2:
+            bt_period = st.selectbox("백테스트 기간", ["1y", "2y", "3y", "5y", "10y"], index=2, key="bt_single_period")
+
+        with bt_col3:
+            bt_stop_loss = st.selectbox("손절매 기준 (Stop-Loss)", [-0.05, -0.06, -0.07, -0.08, -0.10], index=2, format_func=lambda x: f"{x*100:.0f}%", key="bt_single_sl")
+
+        with bt_col4:
+            bt_capital_bt = st.number_input("시뮬레이션 초기 자산 (원)", min_value=1000000, max_value=1000000000, value=10000000, step=1000000, key="bt_single_cap")
+
+        bt_run_btn = st.button("🚀 종목 백테스트 실행하기", type="primary", use_container_width=True, key="bt_single_run")
+
+        if bt_run_btn or 'bt_result' not in st.session_state:
+            with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 SEPA 백테스트 시뮬레이션 계산 중..."):
+                st.session_state['bt_result'] = run_single_stock_backtest(
+                    ticker=bt_ticker,
+                    period=bt_period,
+                    initial_capital=bt_capital_bt,
+                    stop_loss_pct=abs(bt_stop_loss)
+                )
+
+        bt_res = st.session_state.get('bt_result')
+
+        if bt_res:
+            st.markdown(f"### 🏆 백테스트 성과 분석 성적표: **{bt_res['stock_name']} ({bt_res['ticker']})** [기간: {bt_res['period']}]")
+            
+            m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
+            with m_col1:
+                st.metric(
+                    label="💰 전략 총 수익률",
+                    value=f"{bt_res['total_return_pct']:+.1f}%",
+                    delta=f"단순보유: {bt_res['buyhold_return_pct']:+.1f}%"
+                )
+            with m_col2:
+                st.metric(
+                    label="📈 연평균 복리(CAGR)",
+                    value=f"{bt_res.get('cagr', 0.0):+.1f}%"
+                )
+            with m_col3:
+                st.metric(
+                    label="🛡️ 최대 낙폭 (MDD)",
+                    value=f"-{bt_res.get('mdd', 0.0):.1f}%",
+                    delta="리스크 방어력",
+                    delta_color="inverse"
+                )
+            with m_col4:
+                st.metric(
+                    label="🎯 승률 (Win Rate)",
+                    value=f"{bt_res.get('win_rate', 0.0):.1f}%",
+                    delta=f"총 {bt_res.get('total_trades', 0)}회 매매"
+                )
+            with m_col5:
+                st.metric(
+                    label="⚖️ 손익비 (Payoff Ratio)",
+                    value=f"{bt_res.get('payoff_ratio', 1.0):.2f} : 1"
+                )
+
+            st.markdown("### 📈 누적 자산 가치 곡선 (Equity Curve vs 단순보유)")
+            eq_df = bt_res['equity_df']
+
+            fig_eq = go.Figure()
+            fig_eq.add_trace(go.Scatter(
+                x=eq_df.index,
+                y=eq_df['Strategy'],
+                mode='lines',
+                name='JTI 퀀트 전략 자산',
+                line=dict(color='#2563EB', width=2.5)
+            ))
+            fig_eq.add_trace(go.Scatter(
+                x=eq_df.index,
+                y=eq_df['BuyHold'],
+                mode='lines',
+                name='단순 보유 (Buy & Hold)',
+                line=dict(color='#9CA3AF', width=1.5, dash='dot')
+            ))
+            fig_eq.update_layout(
+                height=400,
+                yaxis_title="계좌 총 평가액 (원/$)",
+                margin=dict(t=30, b=20, l=20, r=20),
+                template="plotly_white",
+                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+            )
+            st.plotly_chart(fig_eq, use_container_width=True)
+
+            st.markdown("### 🛡️ 계좌 낙폭 (Drawdown) 추이")
+            fig_dd = go.Figure()
+            fig_dd.add_trace(go.Scatter(
+                x=eq_df.index,
+                y=bt_res['drawdown_series'],
+                mode='lines',
+                fill='tozeroy',
+                name='낙폭 (%)',
+                line=dict(color='#EF4444', width=1.5),
+                fillcolor='rgba(239, 68, 68, 0.2)'
+            ))
+            fig_dd.update_layout(
+                height=240,
+                yaxis_title="낙폭 (%)",
+                margin=dict(t=20, b=20, l=20, r=20),
+                template="plotly_white"
+            )
+            st.plotly_chart(fig_dd, use_container_width=True)
