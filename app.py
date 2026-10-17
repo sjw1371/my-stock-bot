@@ -1164,69 +1164,91 @@ with tab_backtest:
 
         p_run_btn = st.button("🚀 포트폴리오 백테스트 실행", type="primary", use_container_width=True, key="p_run_btn")
 
-        if p_run_btn or 'port_bt_cache' not in st.session_state:
+        cached_port = st.session_state.get('port_bt_cache')
+        is_port_valid = (
+            cached_port is not None
+            and isinstance(cached_port, dict)
+            and 'hist_chart_df' in cached_port
+            and 'yearly_records' in cached_port
+            and 'cagr' in cached_port
+        )
+
+        if p_run_btn or not is_port_valid:
             with st.spinner("⏳ 6대 자산 팩터 및 벤치마크 과거 10년 시세 다운로드 & 포트폴리오 합성 분석 중..."):
-                st.session_state['port_bt_cache'] = run_portfolio_historical_backtest(
+                new_port_res = run_portfolio_historical_backtest(
                     initial_capital=p_initial_cap,
                     period=p_period,
                     category_weights=calc_weights
                 )
+                if new_port_res is not None:
+                    st.session_state['port_bt_cache'] = new_port_res
+                else:
+                    st.session_state.pop('port_bt_cache', None)
 
         p_res = st.session_state.get('port_bt_cache')
 
-        if p_res:
-            st.markdown(f"### 🏆 포트폴리오 성과 분석 성적표 [검증 기간: 최근 {p_res['years']}년]")
+        if p_res and isinstance(p_res, dict):
+            st.markdown(f"### 🏆 포트폴리오 성과 분석 성적표 [검증 기간: 최근 {p_res.get('years', 5)}년]")
             pm1, pm2, pm3, pm4, pm5 = st.columns(5)
             with pm1:
                 st.metric(
                     label="💰 최종 평가 자산",
-                    value=f"{int(p_res['final_capital']):,}원",
-                    delta=f"{p_res['total_return_pct']:+.1f}% 누적수익"
+                    value=f"{int(p_res.get('final_capital', 0)):,}원",
+                    delta=f"{p_res.get('total_return_pct', 0.0):+.1f}% 누적수익"
                 )
             with pm2:
                 st.metric(
                     label="📈 연평균 복리(CAGR)",
-                    value=f"{p_res['cagr']:+.1f}%",
-                    delta=f"S&P 500: {p_res['spy_cagr']:+.1f}%"
+                    value=f"{p_res.get('cagr', 0.0):+.1f}%",
+                    delta=f"S&P 500: {p_res.get('spy_cagr', 0.0):+.1f}%"
                 )
             with pm3:
                 st.metric(
                     label="🛡️ 최대 낙폭 (MDD)",
-                    value=f"-{p_res['mdd']:.1f}%",
-                    delta=f"코스피: -{p_res['ks_mdd']:.1f}%",
+                    value=f"-{p_res.get('mdd', 0.0):.1f}%",
+                    delta=f"코스피: -{p_res.get('ks_mdd', 0.0):.1f}%",
                     delta_color="inverse"
                 )
             with pm4:
                 st.metric(
                     label="⚖️ 샤프 지수 (위험대비)",
-                    value=f"{p_res['sharpe']:.2f}",
-                    delta=f"연 변동성 {p_res['annual_vol']:.1f}%"
+                    value=f"{p_res.get('sharpe', 0.0):.2f}",
+                    delta=f"연 변동성 {p_res.get('annual_vol', 0.0):.1f}%"
                 )
             with pm5:
                 st.metric(
                     label="💵 누적 추정 배당수익",
-                    value=f"{int(p_res['est_total_dividend_paid']):,}원",
-                    delta=f"연 배당률 {p_res['weighted_div_yield']:.2f}%"
+                    value=f"{int(p_res.get('est_total_dividend_paid', 0)):,}원",
+                    delta=f"연 배당률 {p_res.get('weighted_div_yield', 0.0):.2f}%"
                 )
 
-            st.markdown("#### 📈 자산 성장 곡선 (Equity Curve vs S&P500 vs 코스피)")
-            chart_df = p_res['hist_chart_df']
-            fig_p = go.Figure()
-            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['내 포트폴리오'], mode='lines', name='내 포트폴리오', line=dict(color='#2563EB', width=2.5)))
-            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['S&P 500 (SPY)'], mode='lines', name='S&P 500 (SPY)', line=dict(color='#10B981', width=1.5, dash='dash')))
-            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['코스피 (KOSPI)'], mode='lines', name='코스피 (KOSPI)', line=dict(color='#F59E0B', width=1.5, dash='dot')))
-            fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['투자 원금'], mode='lines', name='투자 원금선', line=dict(color='#9CA3AF', width=1.2, dash='dash')))
-            fig_p.update_layout(
-                height=420,
-                yaxis_title="자산 평가액 (원)",
-                margin=dict(t=20, b=20, l=20, r=20),
-                template="plotly_white",
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-            )
-            st.plotly_chart(fig_p, use_container_width=True)
+            chart_df = p_res.get('hist_chart_df')
+            if chart_df is not None and isinstance(chart_df, pd.DataFrame) and not chart_df.empty:
+                st.markdown("#### 📈 자산 성장 곡선 (Equity Curve vs S&P500 vs 코스피)")
+                fig_p = go.Figure()
+                if '내 포트폴리오' in chart_df.columns:
+                    fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['내 포트폴리오'], mode='lines', name='내 포트폴리오', line=dict(color='#2563EB', width=2.5)))
+                if 'S&P 500 (SPY)' in chart_df.columns:
+                    fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['S&P 500 (SPY)'], mode='lines', name='S&P 500 (SPY)', line=dict(color='#10B981', width=1.5, dash='dash')))
+                if '코스피 (KOSPI)' in chart_df.columns:
+                    fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['코스피 (KOSPI)'], mode='lines', name='코스피 (KOSPI)', line=dict(color='#F59E0B', width=1.5, dash='dot')))
+                if '투자 원금' in chart_df.columns:
+                    fig_p.add_trace(go.Scatter(x=chart_df.index, y=chart_df['투자 원금'], mode='lines', name='투자 원금선', line=dict(color='#9CA3AF', width=1.2, dash='dash')))
+                fig_p.update_layout(
+                    height=420,
+                    yaxis_title="자산 평가액 (원)",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    template="plotly_white",
+                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                )
+                st.plotly_chart(fig_p, use_container_width=True)
 
-            st.markdown("#### 📅 연도별 성과 비교 성적표")
-            st.dataframe(pd.DataFrame(p_res['yearly_records']), use_container_width=True, hide_index=True)
+            yearly_records = p_res.get('yearly_records', [])
+            if yearly_records:
+                st.markdown("#### 📅 연도별 성과 비교 성적표")
+                st.dataframe(pd.DataFrame(yearly_records), use_container_width=True, hide_index=True)
+        else:
+            st.info("💡 포트폴리오 백테스트 데이터를 불러오는 중이거나 데이터가 없습니다. 상단의 '🚀 포트폴리오 백테스트 실행' 버튼을 눌러주세요.")
 
     # --------------------------------------------------------------------------
     # 서브탭 2: 미래 10년 정기 적립 & 배당 재투자 복리 시뮬레이터
@@ -1253,7 +1275,16 @@ with tab_backtest:
 
         fut_calc_btn = st.button("🌱 미래 복리 자산 시뮬레이션 계산", type="primary", use_container_width=True, key="fut_calc_btn")
 
-        if fut_calc_btn or 'fut_proj_cache' not in st.session_state:
+        cached_fut = st.session_state.get('fut_proj_cache')
+        is_fut_valid = (
+            cached_fut is not None
+            and isinstance(cached_fut, dict)
+            and 'proj_df' in cached_fut
+            and 'yearly_summary' in cached_fut
+            and 'final_wealth' in cached_fut
+        )
+
+        if fut_calc_btn or not is_fut_valid:
             st.session_state['fut_proj_cache'] = run_future_wealth_projection(
                 initial_capital=fut_init_cap,
                 monthly_contribution=fut_monthly_save,
@@ -1265,53 +1296,57 @@ with tab_backtest:
 
         f_res = st.session_state.get('fut_proj_cache')
 
-        if f_res:
+        if f_res and isinstance(f_res, dict):
+            final_w = f_res.get('final_wealth', 0)
+            tot_p = f_res.get('total_principal', 1)
+            tot_prof = f_res.get('total_profit', 0)
             st.markdown(f"### 🎯 {fut_years_cnt}년 후 미래 자산 & 월 배당금 달성 예측")
             fm1, fm2, fm3, fm4 = st.columns(4)
             with fm1:
                 st.metric(
                     label=f"🏁 {fut_years_cnt}년 후 총 예상 자산",
-                    value=f"{int(f_res['final_wealth']):,}원",
-                    delta=f"수익률 {(f_res['total_profit']/f_res['total_principal']*100):+.1f}%"
+                    value=f"{int(final_w):,}원",
+                    delta=f"수익률 {(tot_prof / tot_p * 100) if tot_p > 0 else 0:+.1f}%"
                 )
             with fm2:
                 st.metric(
                     label=f"💵 {fut_years_cnt}년 후 월 예상 배당금",
-                    value=f"월 {int(f_res['final_monthly_dividend']):,}원",
-                    delta=f"연간 {int(f_res['final_annual_dividend']):,}원 수령"
+                    value=f"월 {int(f_res.get('final_monthly_dividend', 0)):,}원",
+                    delta=f"연간 {int(f_res.get('final_annual_dividend', 0)):,}원 수령"
                 )
             with fm3:
                 st.metric(
                     label="🏦 총 납입 원금 (저축)",
-                    value=f"{int(f_res['total_principal']):,}원",
+                    value=f"{int(tot_p):,}원",
                     delta="순수 투입 원금"
                 )
             with fm4:
                 st.metric(
                     label="📈 순수 복리 수익 (이자+배당)",
-                    value=f"+{int(f_res['total_profit']):,}원",
-                    delta=f"총 배당수령: {int(f_res['total_dividend_earned']):,}원"
+                    value=f"+{int(tot_prof):,}원",
+                    delta=f"총 배당수령: {int(f_res.get('total_dividend_earned', 0)):,}원"
                 )
 
-            st.markdown("#### 📊 복리 스노우볼 자산 성장 궤적 (원금 vs 복리 수익)")
-            p_df = f_res['proj_df']
-            fig_proj = go.Figure()
-            fig_proj.add_trace(go.Scatter(
-                x=p_df['date'], y=p_df['wealth'], mode='lines', name='기말 총 자산',
-                line=dict(color='#10B981', width=3), fill='tonexty'
-            ))
-            fig_proj.add_trace(go.Scatter(
-                x=p_df['date'], y=p_df['principal'], mode='lines', name='누적 납입 원금',
-                line=dict(color='#64748B', width=2), fill='tozeroy', fillcolor='rgba(100, 116, 139, 0.15)'
-            ))
-            fig_proj.update_layout(
-                height=400,
-                yaxis_title="자산 가치 (원)",
-                margin=dict(t=20, b=20, l=20, r=20),
-                template="plotly_white",
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-            )
-            st.plotly_chart(fig_proj, use_container_width=True)
+            p_df = f_res.get('proj_df')
+            if p_df is not None and isinstance(p_df, pd.DataFrame) and not p_df.empty:
+                st.markdown("#### 📊 복리 스노우볼 자산 성장 궤적 (원금 vs 복리 수익)")
+                fig_proj = go.Figure()
+                fig_proj.add_trace(go.Scatter(
+                    x=p_df['date'], y=p_df['wealth'], mode='lines', name='기말 총 자산',
+                    line=dict(color='#10B981', width=3), fill='tonexty'
+                ))
+                fig_proj.add_trace(go.Scatter(
+                    x=p_df['date'], y=p_df['principal'], mode='lines', name='누적 납입 원금',
+                    line=dict(color='#64748B', width=2), fill='tozeroy', fillcolor='rgba(100, 116, 139, 0.15)'
+                ))
+                fig_proj.update_layout(
+                    height=400,
+                    yaxis_title="자산 가치 (원)",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    template="plotly_white",
+                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                )
+                st.plotly_chart(fig_proj, use_container_width=True)
 
             # 재정적 자유 마일스톤 달성 타임라인
             st.markdown("#### 🏆 경제적 자유(FIRE) 마일스톤 달성 타임라인")
@@ -1363,26 +1398,41 @@ with tab_backtest:
 
         bt_run_btn = st.button("🚀 종목 백테스트 실행하기", type="primary", use_container_width=True, key="bt_single_run")
 
-        if bt_run_btn or 'bt_result' not in st.session_state:
+        cached_res = st.session_state.get('bt_result')
+        is_cache_valid = (
+            cached_res is not None
+            and isinstance(cached_res, dict)
+            and 'equity_df' in cached_res
+            and 'drawdown_series' in cached_res
+            and 'cagr' in cached_res
+            and cached_res.get('ticker') == bt_ticker
+            and cached_res.get('period') == bt_period
+        )
+
+        if bt_run_btn or not is_cache_valid:
             with st.spinner(f"⏳ {bt_ticker} ({bt_period}) 정밀 SEPA 백테스트 시뮬레이션 계산 중..."):
-                st.session_state['bt_result'] = run_single_stock_backtest(
+                new_res = run_single_stock_backtest(
                     ticker=bt_ticker,
                     period=bt_period,
                     initial_capital=bt_capital_bt,
                     stop_loss_pct=abs(bt_stop_loss)
                 )
+                if new_res is not None:
+                    st.session_state['bt_result'] = new_res
+                else:
+                    st.session_state.pop('bt_result', None)
 
         bt_res = st.session_state.get('bt_result')
 
-        if bt_res:
-            st.markdown(f"### 🏆 백테스트 성과 분석 성적표: **{bt_res['stock_name']} ({bt_res['ticker']})** [기간: {bt_res['period']}]")
+        if bt_res and isinstance(bt_res, dict):
+            st.markdown(f"### 🏆 백테스트 성과 분석 성적표: **{bt_res.get('stock_name', bt_ticker)} ({bt_res.get('ticker', bt_ticker)})** [기간: {bt_res.get('period', bt_period)}]")
             
             m_col1, m_col2, m_col3, m_col4, m_col5 = st.columns(5)
             with m_col1:
                 st.metric(
                     label="💰 전략 총 수익률",
-                    value=f"{bt_res['total_return_pct']:+.1f}%",
-                    delta=f"단순보유: {bt_res['buyhold_return_pct']:+.1f}%"
+                    value=f"{bt_res.get('total_return_pct', 0.0):+.1f}%",
+                    delta=f"단순보유: {bt_res.get('buyhold_return_pct', 0.0):+.1f}%"
                 )
             with m_col2:
                 st.metric(
@@ -1408,48 +1458,54 @@ with tab_backtest:
                     value=f"{bt_res.get('payoff_ratio', 1.0):.2f} : 1"
                 )
 
-            st.markdown("### 📈 누적 자산 가치 곡선 (Equity Curve vs 단순보유)")
-            eq_df = bt_res['equity_df']
+            eq_df = bt_res.get('equity_df')
+            if eq_df is not None and isinstance(eq_df, pd.DataFrame) and not eq_df.empty:
+                st.markdown("### 📈 누적 자산 가치 곡선 (Equity Curve vs 단순보유)")
+                fig_eq = go.Figure()
+                if 'Strategy' in eq_df.columns:
+                    fig_eq.add_trace(go.Scatter(
+                        x=eq_df.index,
+                        y=eq_df['Strategy'],
+                        mode='lines',
+                        name='JTI 퀀트 전략 자산',
+                        line=dict(color='#2563EB', width=2.5)
+                    ))
+                if 'BuyHold' in eq_df.columns:
+                    fig_eq.add_trace(go.Scatter(
+                        x=eq_df.index,
+                        y=eq_df['BuyHold'],
+                        mode='lines',
+                        name='단순 보유 (Buy & Hold)',
+                        line=dict(color='#9CA3AF', width=1.5, dash='dot')
+                    ))
+                fig_eq.update_layout(
+                    height=400,
+                    yaxis_title="계좌 총 평가액 (원/$)",
+                    margin=dict(t=30, b=20, l=20, r=20),
+                    template="plotly_white",
+                    legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
+                )
+                st.plotly_chart(fig_eq, use_container_width=True)
 
-            fig_eq = go.Figure()
-            fig_eq.add_trace(go.Scatter(
-                x=eq_df.index,
-                y=eq_df['Strategy'],
-                mode='lines',
-                name='JTI 퀀트 전략 자산',
-                line=dict(color='#2563EB', width=2.5)
-            ))
-            fig_eq.add_trace(go.Scatter(
-                x=eq_df.index,
-                y=eq_df['BuyHold'],
-                mode='lines',
-                name='단순 보유 (Buy & Hold)',
-                line=dict(color='#9CA3AF', width=1.5, dash='dot')
-            ))
-            fig_eq.update_layout(
-                height=400,
-                yaxis_title="계좌 총 평가액 (원/$)",
-                margin=dict(t=30, b=20, l=20, r=20),
-                template="plotly_white",
-                legend=dict(yanchor="top", y=0.99, xanchor="left", x=0.01)
-            )
-            st.plotly_chart(fig_eq, use_container_width=True)
-
-            st.markdown("### 🛡️ 계좌 낙폭 (Drawdown) 추이")
-            fig_dd = go.Figure()
-            fig_dd.add_trace(go.Scatter(
-                x=eq_df.index,
-                y=bt_res['drawdown_series'],
-                mode='lines',
-                fill='tozeroy',
-                name='낙폭 (%)',
-                line=dict(color='#EF4444', width=1.5),
-                fillcolor='rgba(239, 68, 68, 0.2)'
-            ))
-            fig_dd.update_layout(
-                height=240,
-                yaxis_title="낙폭 (%)",
-                margin=dict(t=20, b=20, l=20, r=20),
-                template="plotly_white"
-            )
-            st.plotly_chart(fig_dd, use_container_width=True)
+            dd_series = bt_res.get('drawdown_series')
+            if dd_series is not None and hasattr(dd_series, 'empty') and not dd_series.empty:
+                st.markdown("### 🛡️ 계좌 낙폭 (Drawdown) 추이")
+                fig_dd = go.Figure()
+                fig_dd.add_trace(go.Scatter(
+                    x=dd_series.index if hasattr(dd_series, 'index') else (eq_df.index if eq_df is not None else None),
+                    y=dd_series,
+                    mode='lines',
+                    fill='tozeroy',
+                    name='낙폭 (%)',
+                    line=dict(color='#EF4444', width=1.5),
+                    fillcolor='rgba(239, 68, 68, 0.2)'
+                ))
+                fig_dd.update_layout(
+                    height=240,
+                    yaxis_title="낙폭 (%)",
+                    margin=dict(t=20, b=20, l=20, r=20),
+                    template="plotly_white"
+                )
+                st.plotly_chart(fig_dd, use_container_width=True)
+        else:
+            st.info("💡 과거 시세를 불러오는 중이거나 데이터가 없습니다. 상단의 '🚀 종목 백테스트 실행하기' 버튼을 눌러주세요.")
