@@ -441,11 +441,23 @@ with tab_my_account:
             edit_acc = st.selectbox("수정할 계좌 선택", list(raw_p_data.get("accounts", {}).keys()))
             if edit_acc:
                 target_acc_info = raw_p_data["accounts"][edit_acc]
-                e_c1, e_c2 = st.columns(2)
+                e_c1, e_c2, e_c3 = st.columns([1.4, 1.0, 1.0])
                 with e_c1:
-                    new_cash_krw = st.number_input(f"{edit_acc} 원화 현금 (KRW)", value=int(target_acc_info.get("cash_krw", 0)), step=10000)
+                    curr_net_dep = int(target_acc_info.get("net_deposit", 0))
+                    new_net_deposit = st.number_input(
+                        f"💰 {edit_acc} 순투입원금 (원)",
+                        value=curr_net_dep,
+                        step=100000,
+                        help="은행 통장에서 이 계좌로 실제 입금한 총액 - 출금액 (진짜 원금). 0으로 두시면 보유주식 매수가+현금으로 자동 추적됩니다."
+                    )
+                    if curr_net_dep > 0:
+                        st.caption(f"✅ 현재 설정된 순투입원금: **{curr_net_dep:,}원** (정밀 추적 중)")
+                    else:
+                        st.caption("ℹ️ 미입력 시 '보유주식 매수원가 + 현금'으로 자동 추정")
                 with e_c2:
-                    new_cash_usd = st.number_input(f"{edit_acc} 달러 현금 (USD)", value=float(target_acc_info.get("cash_usd", 0.0)), step=10.0)
+                    new_cash_krw = st.number_input(f"💵 원화 현금 잔고 (KRW)", value=int(target_acc_info.get("cash_krw", 0)), step=10000)
+                with e_c3:
+                    new_cash_usd = st.number_input(f"💲 달러 현금 잔고 (USD)", value=float(target_acc_info.get("cash_usd", 0.0)), step=10.0)
 
                 st.markdown("**보유 종목 목록 편집 (수량, 매수단가, 배당수익률, 목표비중)**")
                 holdings_list = target_acc_info.get("holdings", [])
@@ -473,12 +485,13 @@ with tab_my_account:
                 )
 
                 if st.button(f"💾 {edit_acc} 수정 내용 영구 저장하기", type="primary"):
+                    target_acc_info["net_deposit"] = new_net_deposit
                     target_acc_info["cash_krw"] = new_cash_krw
                     target_acc_info["cash_usd"] = new_cash_usd
                     target_acc_info["holdings"] = edited_h_df.to_dict(orient="records")
                     raw_p_data["accounts"][edit_acc] = target_acc_info
                     save_portfolio_data(raw_p_data)
-                    st.success(f"🎉 {edit_acc} 데이터(배당 및 종목 정보)가 영구 저장되었습니다!")
+                    st.success(f"🎉 {edit_acc} 데이터(순투입원금, 현금, 종목 정보)가 영구 저장되었습니다!")
                     st.rerun()
 
         with sync_col3:
