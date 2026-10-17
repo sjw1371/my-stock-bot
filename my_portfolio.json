@@ -53,7 +53,8 @@
           "dividend_yield": 12.0,
           "target_weight": 0.05
         }
-      ]
+      ],
+      "net_deposit": 14700000
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
@@ -170,12 +171,13 @@
           "dividend_yield": 3.8,
           "target_weight": 0.4
         }
-      ]
+      ],
+      "net_deposit": 6500000
     },
     "IRP및코인": {
       "type": "자산배분",
-      "cash_krw": 3121922,
-      "cash_usd": 0,
+      "cash_krw": 3076392,
+      "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "BTC-KRW",
@@ -185,7 +187,8 @@
           "dividend_yield": 0.0,
           "target_weight": 0.01
         }
-      ]
+      ],
+      "net_deposit": 3100000
     }
   },
   "asset_history": [
@@ -263,9 +266,9 @@
     },
     {
       "date": "2026-10-17",
-      "equity": 37551455.0,
-      "cost": 40267268.0,
-      "return_pct": -6.74
+      "equity": 37505936.0,
+      "cost": 40221738.0,
+      "return_pct": -6.75
     }
   ]
 }
