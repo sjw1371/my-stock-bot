@@ -85,7 +85,8 @@
           "dividend_yield": 0.0,
           "target_weight": 0.3
         }
-      ]
+      ],
+      "net_deposit": 5000000
     },
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
@@ -148,7 +149,8 @@
           "dividend_yield": 0.1,
           "target_weight": 0.1
         }
-      ]
+      ],
+      "net_deposit": 11000000
     },
     "ISA": {
       "type": "장기적립",

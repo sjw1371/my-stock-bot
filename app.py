@@ -212,9 +212,13 @@ tab_my_account, tab_allocator, tab_scanner, tab_backtest = st.tabs([
 # 탭 1: [내 계좌] 실시간 종합 관리 & AI 맞춤 진단
 # ==============================================================================
 with tab_my_account:
-    # 1. 포트폴리오 데이터 로드 및 실시간 분석
-    raw_p_data = load_portfolio_data()
-    my_analysis = analyze_my_portfolio(raw_p_data)
+    # 1. 포트폴리오 모듈 및 데이터 핫 리로드 (최신 코드 및 데이터 즉시 동기화)
+    import importlib
+    import portfolio_manager
+    importlib.reload(portfolio_manager)
+    
+    raw_p_data = portfolio_manager.load_portfolio_data()
+    my_analysis = portfolio_manager.analyze_my_portfolio(raw_p_data)
 
     # --------------------------------------------------------------------------
     # 🌟 1. 전체 계좌 종합 성적표 메트릭
