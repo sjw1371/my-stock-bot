@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 26774,
+      "cash_krw": 10949,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -40,8 +40,8 @@
         {
           "ticker": "0053L0.KS",
           "name": "TIGER 차이나휴머노이드로봇",
-          "shares": 273,
-          "avg_price": 11696,
+          "shares": 276,
+          "avg_price": 11653,
           "dividend_yield": 0.0,
           "target_weight": 0.1
         },
@@ -58,7 +58,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 127471,
+      "cash_krw": 117647,
       "cash_usd": 0.0,
       "holdings": [
         {
