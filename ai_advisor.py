@@ -14,8 +14,8 @@ from datetime import datetime
 
 # 지원하는 Gemini 모델 우선순위 (개인 무료 티어 기준 최신 및 고성능 모델)
 GEMINI_MODELS = [
-    "gemini-2.5-flash",
     "gemini-2.0-flash",
+    "gemini-2.5-flash",
     "gemini-1.5-flash",
     "gemini-3.8-flash"
 ]
@@ -143,7 +143,84 @@ def get_system_prompt(portfolio_context: str) -> str:
 - **어조**: 매우 정중하고 신뢰감 넘치는 최고급 금융 PB의 어조 ("대표님, 현재 포트폴리오를 진단한 결과...").
 - **형식**: 핵심 결론을 가장 먼저 제시하는 두괄식 브리핑 -> 데이터 근거 -> 구체적 실전 실행 지침(Action Plan) 순으로 깔끔한 마크다운 불릿 포인트로 작성.
 - 모바일 화면에서도 가독성이 뛰어나도록 단락을 명확히 구분하고 가독성을 극대화할 것.
+- **간결성과 완결성**: 불필요한 장황한 서론이나 중복 설명은 배제하고, 핵심 분석과 실행 지침을 명료하고 완결성 있게 작성하여 답변이 도중에 끊기지 않고 완전히 마무리되도록 하십시오.
 """
+
+
+def stream_gemini_advisor(
+    api_key: str,
+    user_prompt: str,
+    conversation_history: list,
+    portfolio_context: str,
+    preferred_model: str = "gemini-2.0-flash"
+):
+    """
+    Google Gemini API로부터 실시간 스트리밍으로 텍스트 조각(chunk)을 반환합니다.
+    Streamlit의 st.write_stream과 결합하여 대기 시간 없이 0.5초 만에 타이핑되듯 즉시 화면에 출력됩니다.
+    """
+    if not api_key:
+        yield "⚠️ Gemini API 키가 입력되지 않았습니다. 상단 설정창에 키를 입력해 주세요."
+        return
+
+    system_instruction = get_system_prompt(portfolio_context)
+    candidate_models = [preferred_model] + [m for m in GEMINI_MODELS if m != preferred_model]
+
+    try:
+        from google import genai
+        from google.genai import types
+
+        client = genai.Client(api_key=api_key)
+
+        contents = []
+        for msg in conversation_history[-6:]:
+            role = "user" if msg.get("role") == "user" else "model"
+            contents.append(types.Content(
+                role=role,
+                parts=[types.Part.from_text(text=msg.get("content", ""))]
+            ))
+        contents.append(types.Content(
+            role="user",
+            parts=[types.Part.from_text(text=user_prompt)]
+        ))
+
+        for model in candidate_models:
+            try:
+                thinking_cfg = types.ThinkingConfig(thinking_budget=0) if "2.5" in model else None
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.3,
+                    max_output_tokens=8192,
+                    thinking_config=thinking_cfg
+                )
+
+                response_stream = client.models.generate_content_stream(
+                    model=model,
+                    contents=contents,
+                    config=config
+                )
+
+                yielded = False
+                for chunk in response_stream:
+                    if chunk and chunk.text:
+                        yielded = True
+                        yield chunk.text
+
+                if yielded:
+                    return
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    # 스트리밍 실패 시 단일 호출 폴백
+    fallback_res = call_gemini_advisor(
+        api_key=api_key,
+        user_prompt=user_prompt,
+        conversation_history=conversation_history,
+        portfolio_context=portfolio_context,
+        preferred_model=preferred_model
+    )
+    yield fallback_res
 
 
 def call_gemini_advisor(
@@ -151,16 +228,18 @@ def call_gemini_advisor(
     user_prompt: str,
     conversation_history: list,
     portfolio_context: str,
-    preferred_model: str = "gemini-2.5-flash"
+    preferred_model: str = "gemini-2.0-flash"
 ) -> str:
     """
     Google Gemini API를 호출하여 자문 답변을 수신합니다.
-    SDK와 REST API를 모두 지원하여 어떤 환경에서도 안정적으로 동작합니다.
+    - max_output_tokens=8192로 대폭 확대하여 답변 중간 잘림 현상 원천 차단
+    - thinking_budget=0 설정으로 생각 지연 시간(10~15초)을 제거하고 초고속 응답
     """
     if not api_key:
         return "⚠️ Gemini API 키가 입력되지 않았습니다. 상단 또는 사이드바의 API 키 설정창에 키를 입력해 주세요."
 
     system_instruction = get_system_prompt(portfolio_context)
+    candidate_models = [preferred_model] + [m for m in GEMINI_MODELS if m != preferred_model]
 
     # 1. google-genai 최신 SDK 시도
     try:
@@ -168,11 +247,7 @@ def call_gemini_advisor(
         from google.genai import types
 
         client = genai.Client(api_key=api_key)
-        
-        # 모델 우선순위 리스트 (사용자 선호 모델 우선)
-        candidate_models = [preferred_model] + [m for m in GEMINI_MODELS if m != preferred_model]
-        
-        # 대화 히스토리 구성
+
         contents = []
         for msg in conversation_history[-6:]:  # 최근 3턴 대화 유지
             role = "user" if msg.get("role") == "user" else "model"
@@ -185,14 +260,16 @@ def call_gemini_advisor(
             parts=[types.Part.from_text(text=user_prompt)]
         ))
 
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            temperature=0.4,
-            max_output_tokens=2048,
-        )
-
         for model in candidate_models:
             try:
+                thinking_cfg = types.ThinkingConfig(thinking_budget=0) if "2.5" in model else None
+                config = types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    temperature=0.3,
+                    max_output_tokens=8192,
+                    thinking_config=thinking_cfg
+                )
+
                 response = client.models.generate_content(
                     model=model,
                     contents=contents,
@@ -207,7 +284,7 @@ def call_gemini_advisor(
         pass
 
     # 2. REST API 직접 호출 (SDK 호환성 문제 시 완벽한 폴백)
-    url_models = [preferred_model, "gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash"]
+    url_models = [preferred_model] + [m for m in GEMINI_MODELS if m != preferred_model]
     for model in url_models:
         try:
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
@@ -224,15 +301,19 @@ def call_gemini_advisor(
                 "parts": [{"text": user_prompt}]
             })
 
+            gen_config = {
+                "temperature": 0.3,
+                "maxOutputTokens": 8192
+            }
+            if "2.5" in model:
+                gen_config["thinkingConfig"] = {"thinkingBudget": 0}
+
             payload = {
                 "system_instruction": {
                     "parts": [{"text": system_instruction}]
                 },
                 "contents": contents,
-                "generationConfig": {
-                    "temperature": 0.4,
-                    "maxOutputTokens": 2048
-                }
+                "generationConfig": gen_config
             }
 
             resp = requests.post(url, json=payload, timeout=25)

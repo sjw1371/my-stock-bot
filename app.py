@@ -58,8 +58,12 @@ from portfolio_manager import (
     DEFAULT_CATEGORY_TARGETS,
     classify_asset_category
 )
+import importlib
+import ai_advisor
+importlib.reload(ai_advisor)
 from ai_advisor import (
     call_gemini_advisor,
+    stream_gemini_advisor,
     build_portfolio_context,
     get_rule_based_fallback_advisor,
     QUICK_PROMPTS,
@@ -1544,6 +1548,8 @@ with tab_ai_advisor:
     import importlib
     import portfolio_manager
     importlib.reload(portfolio_manager)
+    import ai_advisor
+    importlib.reload(ai_advisor)
     
     raw_p_data = portfolio_manager.load_portfolio_data()
     my_analysis = portfolio_manager.analyze_my_portfolio(raw_p_data)
@@ -1573,7 +1579,7 @@ with tab_ai_advisor:
     if "gemini_api_key" not in st.session_state:
         st.session_state["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "")
     if "gemini_model" not in st.session_state:
-        st.session_state["gemini_model"] = "gemini-2.5-flash"
+        st.session_state["gemini_model"] = "gemini-2.0-flash"
     if "pending_ai_prompt" not in st.session_state:
         st.session_state["pending_ai_prompt"] = None
 
@@ -1733,27 +1739,27 @@ with tab_ai_advisor:
                 st.markdown(active_prompt)
 
             with st.chat_message("assistant", avatar="💼"):
-                with st.spinner("💼 수석 PB가 대표님의 계좌 데이터 및 시장 지표를 분석 중입니다..."):
-                    api_key = st.session_state.get("gemini_api_key", "").strip()
-                    preferred_model = st.session_state.get("gemini_model", "gemini-2.5-flash")
-                    
-                    if api_key:
-                        ai_reply = call_gemini_advisor(
-                            api_key=api_key,
-                            user_prompt=active_prompt,
-                            conversation_history=st.session_state["gemini_chat_history"][:-1],
-                            portfolio_context=portfolio_ctx,
-                            preferred_model=preferred_model
-                        )
-                    else:
-                        rule_reply = get_rule_based_fallback_advisor(active_prompt, my_analysis)
-                        ai_reply = (
-                            "🔑 *(알림: 상단 설정에서 무료 Gemini API 키를 등록하시면 최고 수준의 월가 AI 맞춤 대화가 가동됩니다)*\n\n"
-                            + rule_reply
-                        )
-
+                api_key = st.session_state.get("gemini_api_key", "").strip()
+                preferred_model = st.session_state.get("gemini_model", "gemini-2.0-flash")
+                
+                if api_key:
+                    stream_gen = stream_gemini_advisor(
+                        api_key=api_key,
+                        user_prompt=active_prompt,
+                        conversation_history=st.session_state["gemini_chat_history"][:-1],
+                        portfolio_context=portfolio_ctx,
+                        preferred_model=preferred_model
+                    )
+                    ai_reply = st.write_stream(stream_gen)
+                else:
+                    rule_reply = get_rule_based_fallback_advisor(active_prompt, my_analysis)
+                    ai_reply = (
+                        "🔑 *(알림: 상단 설정에서 무료 Gemini API 키를 등록하시면 최고 수준의 월가 AI 맞춤 대화가 가동됩니다)*\n\n"
+                        + rule_reply
+                    )
                     st.markdown(ai_reply)
-                    st.session_state["gemini_chat_history"].append({"role": "assistant", "content": ai_reply})
+
+                st.session_state["gemini_chat_history"].append({"role": "assistant", "content": ai_reply})
         
         st.rerun()
 
