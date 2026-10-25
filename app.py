@@ -1746,7 +1746,7 @@ with tab_ai_advisor:
                             preferred_model=preferred_model
                         )
                     else:
-                        rule_reply = get_rule_based_fallback_advisor(active_prompt, portfolio_ctx)
+                        rule_reply = get_rule_based_fallback_advisor(active_prompt, my_analysis)
                         ai_reply = (
                             "🔑 *(알림: 상단 설정에서 무료 Gemini API 키를 등록하시면 최고 수준의 월가 AI 맞춤 대화가 가동됩니다)*\n\n"
                             + rule_reply

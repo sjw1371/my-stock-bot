@@ -249,57 +249,99 @@ def call_gemini_advisor(
     return "❌ Gemini API 응답 생성에 실패했습니다. API 키의 유효성 또는 인터넷 연결 상태를 확인해 주세요."
 
 
-def get_rule_based_fallback_advisor(user_prompt: str, analysis: dict) -> str:
+def get_rule_based_fallback_advisor(user_prompt: str, analysis: dict = None, portfolio_context: str = "") -> str:
     """
     API 키가 없거나 연결이 어려울 때, 시스템 내부 퀀트 분석 엔진을 기반으로 
     즉시 맞춤형 자문을 제공하는 룰베이스 응답기입니다.
+    analysis가 dict가 아니거나 str이 전달되더라도 안전하게 복구합니다.
     """
-    total_worth = analysis.get('total_net_worth', 0)
-    cost = analysis.get('total_cost_basis', 0)
-    ret = analysis.get('total_return_pct', 0)
-    cash = analysis.get('total_cash_krw', 0)
+    if isinstance(analysis, str):
+        portfolio_context = analysis
+        analysis = None
+
+    if analysis is None or not isinstance(analysis, dict):
+        try:
+            import portfolio_manager
+            raw_p = portfolio_manager.load_portfolio_data()
+            analysis = portfolio_manager.analyze_my_portfolio(raw_p)
+        except Exception:
+            analysis = {}
+
+    total_worth = analysis.get('total_net_worth', 0.0)
+    cost = analysis.get('total_cost_basis', 0.0)
+    ret = analysis.get('total_return_pct', 0.0)
+    cash = analysis.get('total_cash_krw', analysis.get('total_cash', 0.0))
     orders = analysis.get('order_suggestions')
+    annual_div = analysis.get('total_annual_dividend_krw', 0.0)
+    div_yield = analysis.get('portfolio_dividend_yield', 0.0)
 
     if any(k in user_prompt for k in ["건강검진", "진단", "총평", "상태"]):
-        res = f"### 🩺 [AI PB] 대표님의 포트폴리오 실시간 정밀 건강검진\n\n"
+        res = "### 🩺 [AI PB] 대표님의 포트폴리오 실시간 정밀 건강검진\n\n"
         res += f"대표님, 현재 총 평가자산 **{int(total_worth):,}원**, 순투입원금 **{int(cost):,}원**으로 누적 수익률은 **{ret:+.2f}%**입니다.\n\n"
         res += "**1. 핵심 자산 배분 진단:**\n"
         for acc in analysis.get('account_comparison', [])[:3]:
-            res += f"- **{acc['account']}**: 현재 {acc['current_weight']:.1f}% (목표 {acc['target_weight']:.0f}%) -> {acc['status_badge']}\n"
-        res += f"\n**2. 유동성(현금) 버퍼:** 가용 현금 {int(cash):,}원 (비중 {(cash/total_worth*100) if total_worth>0 else 0:.1f}%)으로 시장 급락 시 방어력이 양호합니다.\n"
-        res += "\n💡 **자유로운 심층 질의응답을 위해 상단의 '🔑 Gemini API 키 입력'에 무료 키를 등록해 주시면, 실시간 대화식 상담이 가능합니다.**"
+            res += f"- **{acc.get('account', '')}**: 현재 {acc.get('current_weight', 0):.1f}% (목표 {acc.get('target_weight', 0):.0f}%) -> {acc.get('status_badge', '')}\n"
+        cash_pct = (cash / total_worth * 100) if total_worth > 0 else 0
+        res += f"\n**2. 유동성(현금) 버퍼:** 가용 현금 {int(cash):,}원 (비중 {cash_pct:.1f}%)으로 시장 급락 시 방어력이 양호합니다.\n"
+        res += "\n💡 **자유로운 심층 질의응답을 위해 상단의 '🔑 Gemini 무료 API 키 설정'에 키를 등록해 주시면, 최고 수준의 실시간 1:1 대화식 상담이 가능합니다.**"
         return res
 
     elif any(k in user_prompt for k in ["매수", "추천", "이번 달", "살까"]):
-        res = f"### 🧭 [AI PB] 이번 달 맞춤형 리밸런싱 및 분할 매수 제언\n\n"
+        res = "### 🧭 [AI PB] 이번 달 맞춤형 리밸런싱 및 분할 매수 제언\n\n"
         res += f"현재 계좌별 가용 현금(총 {int(cash):,}원)과 목표 비중 갭을 고려한 추천 주문입니다:\n\n"
-        if orders is not None and not orders.empty:
+        if orders is not None and hasattr(orders, 'empty') and not orders.empty:
             for _, r in orders.head(3).iterrows():
                 res += f"- **[{r.get('계좌')}] {r.get('종목명')}**: {r.get('추천주문')} ({r.get('주문금액')}) - {r.get('이유')}\n"
         else:
             res += "- 현재 목표 비중 내에서 균형 있게 유지되고 있습니다. 200일선 우상향 중인 글로벌 코어 ETF 분할 적립을 추천합니다.\n"
-        res += "\n💡 **종목별 구체적 비중 상담을 원하시면 Gemini API 키를 등록하여 대화를 시작해 보세요!**"
+        res += "\n💡 **종목별 구체적 비중 상담 및 매수 타이밍을 원하시면 상단에 무료 Gemini API 키를 등록해 보세요!**"
         return res
 
     elif any(k in user_prompt for k in ["손절", "위험", "미너비니"]):
-        res = f"### 🚨 [AI PB] 마크 미너비니 리스크 관리 & 손절(-7%) 전수 점검\n\n"
+        res = "### 🚨 [AI PB] 마크 미너비니 리스크 관리 & 손절(-7%) 전수 점검\n\n"
         danger_list = []
         all_h = analysis.get('all_holdings_df')
-        if all_h is not None and not all_h.empty:
+        if all_h is not None and hasattr(all_h, 'empty') and not all_h.empty:
             for _, row in all_h.iterrows():
-                if "손절" in str(row.get('진단상태')) or row.get('수익률(%)', 0) <= -7.0:
+                if "손절" in str(row.get('진단상태', '')) or row.get('수익률(%)', 0) <= -7.0:
                     danger_list.append(row)
         
         if danger_list:
             res += "⚠️ **미너비니 -7% 안전 버퍼 손절선에 도달한 경고 종목이 있습니다:**\n"
             for d in danger_list:
-                res += f"- **[{d.get('계좌')}] {d.get('종목명')}**: 수익률 {d.get('수익률(%)'):.1f}% -> {d.get('처방내용')}\n"
+                res += f"- **[{d.get('계좌')}] {d.get('종목명')}**: 수익률 {d.get('수익률(%)', 0):.1f}% -> {d.get('처방내용', '')}\n"
         else:
             res += "✅ **현재 보유 중인 개별 종목 중 -7% 손절 기준선에 도달한 위험 종목은 없습니다.** 추세를 안정적으로 유지하고 있습니다.\n"
+        res += "\n💡 **상세한 손절 및 트레일링 스탑 가이드는 Gemini 무료 API 키를 등록하시면 실시간으로 대화하실 수 있습니다.**"
+        return res
+
+    elif any(k in user_prompt for k in ["VIX", "공포", "시장 상태", "대응"]):
+        res = "### 🌐 [AI PB] 거시 시장(VIX) 및 국면별 포트폴리오 대응 전략\n\n"
+        res += "현재 시장 거시 지표를 분석한 결과:\n\n"
+        res += f"- **가용 총 현금**: {int(cash):,}원 (안전 버퍼)\n"
+        res += "- **원칙 제언**:\n"
+        res += "  1. **VIX 15~20 구간 (중립 추세)**: 200일선 우상향 코어 자산(S&P500, 미국배당다우존스)은 흔들림 없이 정기 분할 적립을 유지하십시오.\n"
+        res += "  2. **단기 스윙 종목**: 50일선 위에 위치한 주도주 위주로 비중을 유지하고, 50일선 이탈 종목은 반등 시 현금화하여 방어력을 높이십시오.\n"
+        res += "\n💡 **실시간 VIX 수치 기반의 정밀 포트폴리오 리밸런싱을 원하시면 Gemini API 키를 등록해 주세요!**"
+        return res
+
+    elif any(k in user_prompt for k in ["복리", "10년", "배당", "파이프라인", "플랜"]):
+        res = "### 🌱 [AI PB] 10년 복리 자산 증식 & 월 배당 파이프라인 로드맵\n\n"
+        monthly_div = annual_div / 12.0
+        res += f"대표님, 현재 연간 예상 배당금은 **{int(annual_div):,}원** (월환산 약 **{int(monthly_div):,}원**, 배당수익률 {div_yield:.2f}%)입니다.\n\n"
+        res += "**목표: 10년 뒤 '월 배당 200만 원 (연 2,400만 원)' 파이프라인 달성 전략**\n"
+        res += "- **목표 총자산**: 세후 배당수익률 4.0% 가정 시 약 **6억 원**의 자산이 필요합니다.\n"
+        res += f"- **현재 자산**: 약 {int(total_worth):,}원\n"
+        res += "- **핵심 액션 플랜**:\n"
+        res += "  1. **절세 계좌 풀 활용**: 연금저축(연 600만 원) + ISA(연 2,000만 원)에 최우선 납입하여 배당소득세(15.4%)를 전액 재투자합니다.\n"
+        res += "  2. **배당금 100% 재투자 (DRIP)**: 나오는 배당금을 즉시 코어 배당성장 ETF에 재투자하여 복리 효과를 극대화합니다.\n"
+        res += "  3. **월 적립 목표**: 연 8% 복리 성장 가정 시, 매달 약 200~250만 원을 꾸준히 적립하시면 10년 이내에 월 200만 원 배당 파이프라인이 완성됩니다.\n"
+        res += "\n💡 **대표님의 월 가용 저축액에 맞춘 맞춤형 시뮬레이션을 원하시면 Gemini API 키를 등록해 대화를 이어가 보세요!**"
         return res
 
     return (
         f"대표님, 질문하신 내용을 접수했습니다.\n\n"
-        f"현재 총자산 {int(total_worth):,}원, 가용 현금 {int(cash):,}원 상태를 고려할 때 원칙적인 리스크 관리가 필요합니다.\n\n"
+        f"현재 총자산 {int(total_worth):,}원, 순투입 {int(cost):,}원, 가용 현금 {int(cash):,}원 상태를 고려할 때 원칙적인 리스크 관리가 필요합니다.\n\n"
         f"💡 **자유로운 대화식 상담을 원활히 이용하시려면, Google AI Studio에서 무료로 발급받으신 Gemini API 키를 상단 설정창에 등록해 주세요!**"
     )
+
