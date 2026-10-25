@@ -58,6 +58,13 @@ from portfolio_manager import (
     DEFAULT_CATEGORY_TARGETS,
     classify_asset_category
 )
+from ai_advisor import (
+    call_gemini_advisor,
+    build_portfolio_context,
+    get_rule_based_fallback_advisor,
+    QUICK_PROMPTS,
+    GEMINI_MODELS
+)
 
 # ==============================================================================
 # 🌟 페이지 기본 설정 및 스타일링
@@ -200,11 +207,12 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 st.markdown('<div class="main-header">💼 JTI 나만의 AI 자산관리 PB & 마크 미너비니 퀀트 시스템</div>', unsafe_allow_html=True)
 st.markdown(f'<div class="sub-header">내 5대 계좌 실시간 통합 관리 · Dual-Track 건강검진 & 맞춤 주문표 · SEPA 트렌드 템플릿 | 기준일시: {datetime.now().strftime("%Y-%m-%d %H:%M")}</div>', unsafe_allow_html=True)
 
-tab_my_account, tab_allocator, tab_scanner, tab_backtest = st.tabs([
+tab_my_account, tab_allocator, tab_scanner, tab_backtest, tab_ai_advisor = st.tabs([
     "💼 [내 계좌] 실시간 종합 관리 & AI 맞춤 진단",
     "🧭 [자산 배분] Dual-Lens 포트폴리오 빌더 & What-If",
     "📡 [시장 스캐너] SEPA 트렌드 & 정밀 VCP",
-    "📈 [백테스팅 & 복리] 10년 과거 검증 & 미래 부 시뮬레이터"
+    "📈 [백테스팅 & 복리] 10년 과거 검증 & 미래 부 시뮬레이터",
+    "💬 [AI 전담 PB] 1:1 주식 자문 & 자산 증식 상담소"
 ])
 
 
@@ -1526,3 +1534,257 @@ with tab_backtest:
                 st.plotly_chart(fig_dd, use_container_width=True)
         else:
             st.info("💡 과거 시세를 불러오는 중이거나 데이터가 없습니다. 상단의 '🚀 종목 백테스트 실행하기' 버튼을 눌러주세요.")
+
+
+# ==============================================================================
+# 탭 5: [AI 전담 PB] 1:1 주식 자문 & 자산 증식 상담소
+# ==============================================================================
+with tab_ai_advisor:
+    # 1. 포트폴리오 데이터 핫 리로드 (최신 코드 및 데이터 즉시 동기화)
+    import importlib
+    import portfolio_manager
+    importlib.reload(portfolio_manager)
+    
+    raw_p_data = portfolio_manager.load_portfolio_data()
+    my_analysis = portfolio_manager.analyze_my_portfolio(raw_p_data)
+    
+    # 거시 시장 지표 캐싱 수집 (VIX 및 4대 지수 이평선)
+    macro_summary = {}
+    try:
+        macro_data = fetch_macro_data()
+        m_score, m_status, vix_val, d_logs, idx_sum = evaluate_macro(macro_data)
+        macro_summary = {
+            'market_score': m_score,
+            'market_status': m_status,
+            'vix': vix_val,
+            'vix_change': macro_data.get('vix_change', 0.0),
+            'vix_change_pct': macro_data.get('vix_change_pct', 0.0),
+            'indices_summary': idx_sum
+        }
+    except Exception:
+        pass
+
+    # AI 주식 자문 전용 포트폴리오 텍스트 컨텍스트 생성
+    portfolio_ctx = build_portfolio_context(raw_p_data, my_analysis, macro_summary)
+
+    # 세션 상태 초기화
+    if "gemini_chat_history" not in st.session_state:
+        st.session_state["gemini_chat_history"] = []
+    if "gemini_api_key" not in st.session_state:
+        st.session_state["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "")
+    if "gemini_model" not in st.session_state:
+        st.session_state["gemini_model"] = "gemini-2.5-flash"
+    if "pending_ai_prompt" not in st.session_state:
+        st.session_state["pending_ai_prompt"] = None
+
+    # 헤더
+    st.markdown("### 💬 월가 수석 PB & 마크 미너비니 퀀트 자문관")
+    st.markdown(
+        "대표님의 **실시간 5대 계좌(자산 3,800여만 원, 순투입 4,030만 원)**, **보유 20여 개 종목**, "
+        "계좌별 예수금, 그리고 **실시간 거시 시장 지표(VIX/4대 지수 정배열)**를 100% 숙지한 최정예 1:1 전담 AI 금융 PB입니다."
+    )
+
+    # --------------------------------------------------------------------------
+    # 🌟 수석 PB 실시간 포트폴리오 브리핑 카드
+    # --------------------------------------------------------------------------
+    total_worth = my_analysis.get('total_net_worth', 0.0)
+    cost_basis = my_analysis.get('total_cost_basis', 0.0)
+    pnl_val = my_analysis.get('total_pnl_krw', 0.0)
+    ret_pct = my_analysis.get('total_return_pct', 0.0)
+    total_cash_val = my_analysis.get('total_cash', 0.0)
+    vix_val_disp = macro_summary.get('vix', 19.5)
+    vix_status_disp = macro_summary.get('market_status', '중립')
+
+    pb1, pb2, pb3, pb4, pb5 = st.columns(5)
+    with pb1:
+        st.metric("💼 총 평가 자산", f"{total_worth:,.0f}원")
+    with pb2:
+        st.metric("🎯 순투입원금 (진짜 원금)", f"{cost_basis:,.0f}원")
+    with pb3:
+        st.metric("📈 누적 평가 손익", f"{pnl_val:+,.0f}원", delta=f"{ret_pct:+.2f}%")
+    with pb4:
+        st.metric("💵 가용 총 예수금", f"{total_cash_val:,.0f}원")
+    with pb5:
+        st.metric("🌐 시장 VIX / 상태", f"{vix_val_disp:.2f}", delta=vix_status_disp)
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # ⚙️ Google Gemini API 설정 및 모델 선택 (접이식)
+    # --------------------------------------------------------------------------
+    has_api_key = bool(st.session_state["gemini_api_key"].strip())
+    exp_label = "✅ Google Gemini API 연동 완료 (클릭하여 설정 변경)" if has_api_key else "🔑 Google Gemini 무료 API 키 설정 (클릭하여 1분 만에 등록)"
+    
+    with st.expander(exp_label, expanded=not has_api_key):
+        cfg_col1, cfg_col2 = st.columns([3, 2])
+        with cfg_col1:
+            entered_key = st.text_input(
+                "Gemini API Key (개인 무료)",
+                value=st.session_state["gemini_api_key"],
+                type="password",
+                help="Google AI Studio에서 무료로 발급받은 API 키를 입력하세요. 브라우저 세션에 안전하게 유지됩니다."
+            )
+            if entered_key != st.session_state["gemini_api_key"]:
+                st.session_state["gemini_api_key"] = entered_key
+                st.rerun()
+
+        with cfg_col2:
+            current_model = st.selectbox(
+                "Gemini 최신 모델 선택",
+                GEMINI_MODELS,
+                index=GEMINI_MODELS.index(st.session_state["gemini_model"]) if st.session_state["gemini_model"] in GEMINI_MODELS else 0,
+                help="개인 무료 티어 기준 가장 우수한 최신 모델들을 우선적으로 지원합니다."
+            )
+            if current_model != st.session_state["gemini_model"]:
+                st.session_state["gemini_model"] = current_model
+                st.rerun()
+
+        st.markdown(
+            """
+            💡 **무료 API 키 발급 방법 (100% 무료, 신용카드 등록 불필요)**:  
+            1. [Google AI Studio (aistudio.google.com)](https://aistudio.google.com/app/apikey) 접속 (구글 계정 로그인)  
+            2. **'Create API Key'** 버튼 클릭 후 복사  
+            3. 위 입력창에 붙여넣으면 즉시 전담 AI PB가 가동됩니다!  
+            *(※ API 키가 없어도 룰 기반 기본 PB 자문이 가동되지만, 키를 등록하시면 최고 수준의 월가 LLM 맞춤 대화가 가능합니다.)*
+            """
+        )
+
+    # --------------------------------------------------------------------------
+    # ⚡ 모바일 원터치 빠른 자문 프리셋 버튼
+    # --------------------------------------------------------------------------
+    st.markdown("##### ⚡ 원터치 빠른 자문 (아래 카드를 터치하시면 즉시 분석합니다)")
+    
+    # 1행: 3개 버튼
+    r1_c1, r1_c2, r1_c3 = st.columns(3)
+    with r1_c1:
+        if st.button(f"{QUICK_PROMPTS[0]['icon']} {QUICK_PROMPTS[0]['title']}", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = QUICK_PROMPTS[0]["prompt"]
+            st.rerun()
+    with r1_c2:
+        if st.button(f"{QUICK_PROMPTS[1]['icon']} {QUICK_PROMPTS[1]['title']}", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = QUICK_PROMPTS[1]["prompt"]
+            st.rerun()
+    with r1_c3:
+        if st.button(f"{QUICK_PROMPTS[2]['icon']} {QUICK_PROMPTS[2]['title']}", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = QUICK_PROMPTS[2]["prompt"]
+            st.rerun()
+
+    # 2행: 2개 버튼 + 대화 초기화 버튼
+    r2_c1, r2_c2, r2_c3 = st.columns([1, 1, 1])
+    with r2_c1:
+        if st.button(f"{QUICK_PROMPTS[3]['icon']} {QUICK_PROMPTS[3]['title']}", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = QUICK_PROMPTS[3]["prompt"]
+            st.rerun()
+    with r2_c2:
+        if st.button(f"{QUICK_PROMPTS[4]['icon']} {QUICK_PROMPTS[4]['title']}", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = QUICK_PROMPTS[4]["prompt"]
+            st.rerun()
+    with r2_c3:
+        if st.button("🗑️ 대화 내역 초기화", use_container_width=True):
+            st.session_state["gemini_chat_history"] = []
+            st.session_state["pending_ai_prompt"] = None
+            st.rerun()
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # 💬 대화창 (Chat Messages)
+    # --------------------------------------------------------------------------
+    chat_container = st.container()
+    with chat_container:
+        if not st.session_state["gemini_chat_history"]:
+            with st.chat_message("assistant", avatar="💼"):
+                st.markdown(
+                    f"""
+                    **반갑습니다, 대표님! 대표님의 5대 계좌를 전담 관리하는 수석 AI 자산관리 PB입니다.**
+                    
+                    현재 대표님의 실시간 5대 계좌(순투입 **{cost_basis:,.0f}원**, 총자산 **{total_worth:,.0f}원**), **20여 개 보유 종목**, 계좌별 예수금, 그리고 실시간 거시지표(VIX: **{vix_val_disp:.2f}**)를 100% 실시간으로 숙지하고 있습니다.
+                    
+                    - 🩺 상단의 **'원터치 빠른 자문'** 버튼을 터치하시거나,
+                    - 💬 하단 대화창에 *"이번 달 ISA에서 무엇을 살까?"*, *"-7% 손절해야 할 위험 종목은?"*, *"10년 뒤 월 200만 원 배당 플랜은?"* 등 자유롭게 질문해 주세요.
+                    """
+                )
+        else:
+            for msg in st.session_state["gemini_chat_history"]:
+                role = msg.get("role", "user")
+                avatar = "💼" if role == "assistant" else "👤"
+                with st.chat_message(role, avatar=avatar):
+                    st.markdown(msg.get("content", ""))
+
+    # --------------------------------------------------------------------------
+    # 📥 사용자 입력 처리 (원터치 버튼 또는 채팅 입력창)
+    # --------------------------------------------------------------------------
+    user_input = st.chat_input("대표님, 주식 매수/매도, 자산 배분, 복리 플랜 등 무엇이든 질문하세요...")
+
+    active_prompt = None
+    if st.session_state["pending_ai_prompt"]:
+        active_prompt = st.session_state["pending_ai_prompt"]
+        st.session_state["pending_ai_prompt"] = None
+    elif user_input:
+        active_prompt = user_input
+
+    if active_prompt:
+        # 사용자 메시지 추가
+        st.session_state["gemini_chat_history"].append({"role": "user", "content": active_prompt})
+        
+        # 화면에 즉시 표시
+        with chat_container:
+            with st.chat_message("user", avatar="👤"):
+                st.markdown(active_prompt)
+
+            with st.chat_message("assistant", avatar="💼"):
+                with st.spinner("💼 수석 PB가 대표님의 계좌 데이터 및 시장 지표를 분석 중입니다..."):
+                    api_key = st.session_state.get("gemini_api_key", "").strip()
+                    preferred_model = st.session_state.get("gemini_model", "gemini-2.5-flash")
+                    
+                    if api_key:
+                        ai_reply = call_gemini_advisor(
+                            api_key=api_key,
+                            user_prompt=active_prompt,
+                            conversation_history=st.session_state["gemini_chat_history"][:-1],
+                            portfolio_context=portfolio_ctx,
+                            preferred_model=preferred_model
+                        )
+                    else:
+                        rule_reply = get_rule_based_fallback_advisor(active_prompt, portfolio_ctx)
+                        ai_reply = (
+                            "🔑 *(알림: 상단 설정에서 무료 Gemini API 키를 등록하시면 최고 수준의 월가 AI 맞춤 대화가 가동됩니다)*\n\n"
+                            + rule_reply
+                        )
+
+                    st.markdown(ai_reply)
+                    st.session_state["gemini_chat_history"].append({"role": "assistant", "content": ai_reply})
+        
+        st.rerun()
+
+    # --------------------------------------------------------------------------
+    # 📱 스마트폰(모바일) 연동 가이드
+    # --------------------------------------------------------------------------
+    st.markdown("---")
+    with st.expander("📱 스마트폰(모바일)에서 이 대시보드 및 AI PB 바로 연동하는 방법", expanded=False):
+        st.markdown(
+            """
+            ### 📲 스마트폰 홈 화면에 'AI PB 앱'으로 등록하는 방법 (1분 소요)
+            
+            1. **동일 Wi-Fi 연결**:
+               - PC와 스마트폰을 같은 집/사무실 Wi-Fi에 연결합니다.
+               
+            2. **PC의 로컬 IP 주소 확인**:
+               - 윈도우 키 누르고 `cmd` 실행 -> `ipconfig` 입력 후 엔터
+               - `IPv4 주소` 확인 (예: `192.168.0.15`)
+               
+            3. **스마트폰 브라우저에서 접속**:
+               - 스마트폰 사파리(아이폰) 또는 크롬(갤럭시)을 엽니다.
+               - 주소창에 `http://[확인한_PC_IPv4주소]:8501` 입력 (예: `http://192.168.0.15:8501`)
+               
+            4. **홈 화면에 추가 (원터치 앱 만들기)**:
+               - **아이폰 (Safari)**: 하단 공유 버튼(`공유` 아이콘) -> **[홈 화면에 추가]**
+               - **안드로이드 (Chrome)**: 우측 상단 메뉴(`⋮`) -> **[홈 화면에 추가]**
+               - 이제 스마트폰 바탕화면에 앱 아이콘이 생겨 언제든 터치 한 번으로 1:1 PB 상담을 받으실 수 있습니다!
+               
+            5. **외부(LTE/5G)에서 접속하고 싶을 때**:
+               - 무료 Cloudflare 터널을 활용하면 PC가 켜져 있는 동안 전 세계 어디서든 안전한 암호화 주소(예: `https://xxx.trycloudflare.com`)로 스마트폰 접속이 가능합니다.
+               - PC 터미널에서 `cloudflared tunnel --url http://localhost:8501` 명령어 한 줄로 즉시 외부 주소가 생성됩니다.
+            """
+        )
+
