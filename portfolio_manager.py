@@ -38,6 +38,70 @@ DEFAULT_CATEGORY_TARGETS = {
     "💵 안전 현금": 0.08
 }
 
+# 6대 자산 팩터별 퀀트 프로파일 (기대수익률, 변동성, 배당률, 위기 낙폭)
+FACTOR_PROFILES = {
+    "🌱 글로벌 코어 지수": {
+        "expected_cagr": 0.105,   # 10.5%
+        "volatility": 0.160,      # 16.0%
+        "dividend_yield": 0.013,  # 1.3%
+        "crisis_2008": -0.38,     # -38%
+        "crisis_2020": -0.34,     # -34%
+        "crisis_2022": -0.19,     # -19%
+        "best_account": "연금저축 / ISA (과세이연/비과세)",
+        "tax_reason": "장기 복리 해외 지수 ETF는 매매차익 및 배당소득 과세이연 혜택 극대화"
+    },
+    "💰 고배당 & 인컴": {
+        "expected_cagr": 0.085,   # 8.5%
+        "volatility": 0.120,      # 12.0%
+        "dividend_yield": 0.042,  # 4.2%
+        "crisis_2008": -0.26,
+        "crisis_2020": -0.22,
+        "crisis_2022": -0.10,
+        "best_account": "ISA / 연금저축 (배당세 15.4% 비과세/이연)",
+        "tax_reason": "고배당 인컴 자산은 금융소득종합과세 회피 및 15.4% 배당소득세 절세 필수"
+    },
+    "🤖 테마 & 미래혁신": {
+        "expected_cagr": 0.145,   # 14.5%
+        "volatility": 0.260,      # 26.0%
+        "dividend_yield": 0.005,  # 0.5%
+        "crisis_2008": -0.48,
+        "crisis_2020": -0.32,
+        "crisis_2022": -0.35,
+        "best_account": "ISA / 일반계좌(해외)",
+        "tax_reason": "시세차익 중심 고성장 자산으로 ISA 비과세 또는 해외계좌 양도세 기본공제 활용"
+    },
+    "🚀 퀀트 스윙 & 모멘텀": {
+        "expected_cagr": 0.160,   # 16.0% (-7% 손절 적용 시)
+        "volatility": 0.200,      # 20.0%
+        "dividend_yield": 0.008,  # 0.8%
+        "crisis_2008": -0.18,     # 손절 후 현금 대피
+        "crisis_2020": -0.14,
+        "crisis_2022": -0.12,
+        "best_account": "일반계좌(해외/국내)",
+        "tax_reason": "단기 잦은 매매와 손절이 발생하는 스윙은 일반계좌에서 매매 손익 상계 활용"
+    },
+    "🪙 대체자산 (코인)": {
+        "expected_cagr": 0.220,   # 22.0%
+        "volatility": 0.550,      # 55.0%
+        "dividend_yield": 0.0,
+        "crisis_2008": -0.60,
+        "crisis_2020": -0.50,
+        "crisis_2022": -0.65,
+        "best_account": "IRP및코인 (전용 지갑)",
+        "tax_reason": "포트폴리오 2~5% 미만 소액으로 인플레이션 헤지 및 초과수익 추구"
+    },
+    "💵 안전 현금": {
+        "expected_cagr": 0.035,   # 3.5% (CMA / 파킹)
+        "volatility": 0.002,
+        "dividend_yield": 0.035,
+        "crisis_2008": 0.0,
+        "crisis_2020": 0.0,
+        "crisis_2022": 0.0,
+        "best_account": "모든 계좌의 예수금 / CMA",
+        "tax_reason": "급락장 저가 분할매수를 위한 필수 유동성 탄약 버퍼"
+    }
+}
+
 
 def classify_asset_category(ticker: str, name: str) -> str:
     """종목의 티커와 명칭을 기반으로 6대 자산 팩터 자동 분류"""
@@ -526,6 +590,191 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
         'target_accounts': target_accounts,
         'target_categories': target_categories
     }
+
+
+def calculate_portfolio_quant_metrics(cat_weights_pct: dict, total_equity: float) -> dict:
+    """
+    6대 자산 팩터 비중(%)과 총자산을 기반으로
+    기대수익률(CAGR), 포트폴리오 변동성, 샤프지수, 배당 스트림, 과거 위기 낙폭 시뮬레이션 및 밸런스 점수 산출
+    """
+    tot_w = sum(cat_weights_pct.values())
+    if tot_w <= 0:
+        norm_w = {k: 1.0 / len(FACTOR_PROFILES) for k in FACTOR_PROFILES}
+    else:
+        norm_w = {k: cat_weights_pct.get(k, 0.0) / tot_w for k in FACTOR_PROFILES}
+
+    cagr = sum(norm_w[k] * FACTOR_PROFILES[k]['expected_cagr'] for k in FACTOR_PROFILES)
+    weighted_vol = sum(norm_w[k] * FACTOR_PROFILES[k]['volatility'] for k in FACTOR_PROFILES)
+    portfolio_vol = weighted_vol * 0.78  # 상관관계 분산 감소 효과 반영
+
+    div_yield = sum(norm_w[k] * FACTOR_PROFILES[k]['dividend_yield'] for k in FACTOR_PROFILES)
+    annual_div = total_equity * div_yield
+    monthly_div = annual_div / 12.0
+
+    rf = 0.035  # 무위험 수익률 3.5%
+    sharpe = (cagr - rf) / portfolio_vol if portfolio_vol > 0 else 0.0
+
+    stress_2008 = sum(norm_w[k] * FACTOR_PROFILES[k]['crisis_2008'] for k in FACTOR_PROFILES)
+    stress_2020 = sum(norm_w[k] * FACTOR_PROFILES[k]['crisis_2020'] for k in FACTOR_PROFILES)
+    stress_2022 = sum(norm_w[k] * FACTOR_PROFILES[k]['crisis_2022'] for k in FACTOR_PROFILES)
+
+    # 밸런스 지수 계산 (HHI 기반 분산도 40점 + 현금완충 20점 + 배당안정성 20점 + 변동성방어 20점 = 100점 만점)
+    hhi = sum((w ** 2) for w in norm_w.values())
+    diversification_score = max(0.0, min(40.0, (1.0 - hhi) / (1.0 - (1.0 / len(FACTOR_PROFILES))) * 40.0))
+    cash_w = norm_w.get('💵 안전 현금', 0.0)
+    cash_score = 20.0 if 0.05 <= cash_w <= 0.15 else max(5.0, 20.0 - abs(cash_w - 0.08) * 100.0)
+    div_score = min(20.0, (div_yield / 0.04) * 20.0)
+    vol_score = max(5.0, min(20.0, (0.25 - portfolio_vol) / 0.15 * 20.0))
+    health_score = int(round(diversification_score + cash_score + div_score + vol_score))
+
+    growth_ratio = int(round((norm_w.get('🌱 글로벌 코어 지수', 0) + norm_w.get('🤖 테마 & 미래혁신', 0) + norm_w.get('🚀 퀀트 스윙 & 모멘텀', 0)) * 100))
+    income_ratio = int(round((norm_w.get('💰 고배당 & 인컴', 0) + norm_w.get('💵 안전 현금', 0)) * 100))
+
+    return {
+        'expected_cagr': cagr,
+        'portfolio_volatility': portfolio_vol,
+        'sharpe_ratio': sharpe,
+        'dividend_yield': div_yield,
+        'annual_dividend_krw': annual_div,
+        'monthly_dividend_krw': monthly_div,
+        'health_score': health_score,
+        'growth_ratio': growth_ratio,
+        'income_ratio': income_ratio,
+        'stress_2008': stress_2008,
+        'stress_2020': stress_2020,
+        'stress_2022': stress_2022,
+        'normalized_weights': norm_w
+    }
+
+
+def get_cross_lens_matrix(analysis: dict) -> dict:
+    """
+    5대 계좌 x 6대 자산 팩터 크로스 매트릭스 및 세제 최적화 분석 결과 반환
+    """
+    acc_list = ["연금저축펀드", "일반계좌(해외)", "ISA", "일반계좌(국내)", "IRP및코인"]
+    cat_list = [
+        "🌱 글로벌 코어 지수",
+        "💰 고배당 & 인컴",
+        "🤖 테마 & 미래혁신",
+        "🚀 퀀트 스윙 & 모멘텀",
+        "🪙 대체자산 (코인)",
+        "💵 안전 현금"
+    ]
+
+    all_h = analysis.get('all_holdings_df', pd.DataFrame())
+    matrix_df = pd.DataFrame(0.0, index=acc_list, columns=cat_list)
+
+    if not all_h.empty:
+        for _, r in all_h.iterrows():
+            acc = r.get('계좌')
+            cat = r.get('자산분류')
+            val = r.get('평가금액(원)', 0.0)
+            if acc in matrix_df.index and cat in matrix_df.columns:
+                matrix_df.loc[acc, cat] += val
+
+    # 계좌별 현금 추가
+    for acc in acc_list:
+        acc_cash = analysis.get('accounts', {}).get(acc, {}).get('total_cash_krw', 0.0)
+        matrix_df.loc[acc, "💵 안전 현금"] += acc_cash
+
+    matrix_df["계좌 합계"] = matrix_df.sum(axis=1)
+
+    # 세제 효율성 점검 및 인사이트
+    total_net = analysis.get('total_net_worth', 1.0)
+    tax_favored_eval = (
+        matrix_df.loc["연금저축펀드", "계좌 합계"]
+        + matrix_df.loc["ISA", "계좌 합계"]
+        + matrix_df.loc["IRP및코인", "계좌 합계"] * 0.9  # IRP 부분 포함
+    )
+    tax_favored_pct = (tax_favored_eval / total_net * 100.0) if total_net > 0 else 0.0
+
+    taxable_dividend = matrix_df.loc["일반계좌(해외)", "💰 고배당 & 인컴"] + matrix_df.loc["일반계좌(국내)", "💰 고배당 & 인컴"]
+    taxable_dividend_pct = (taxable_dividend / total_net * 100.0) if total_net > 0 else 0.0
+
+    return {
+        'matrix_df': matrix_df,
+        'tax_favored_eval': tax_favored_eval,
+        'tax_favored_pct': tax_favored_pct,
+        'taxable_dividend_krw': taxable_dividend,
+        'taxable_dividend_pct': taxable_dividend_pct
+    }
+
+
+def calculate_smart_deposit_rebalancing(analysis: dict, deposit_krw: float, target_cat_weights_pct: dict) -> list:
+    """
+    [No-Sell 스마트 입금 리밸런싱 알고리즘]
+    기존 주식을 매도하지 않고, 새로 입금할 현금(deposit_krw)을
+    현재 목표 비중에서 가장 결핍된 자산군 및 계좌로 스마트 분배
+    """
+    total_eq = analysis.get('total_net_worth', 0.0)
+    new_tot = total_eq + deposit_krw
+    cats_data = analysis.get('categories_data', {})
+
+    tot_w = sum(target_cat_weights_pct.values())
+    norm_w = {k: target_cat_weights_pct.get(k, 0.0) / tot_w for k in target_cat_weights_pct} if tot_w > 0 else {}
+
+    deficits = {}
+    for c, w in norm_w.items():
+        cur_eval = cats_data.get(c, {}).get('eval_krw', 0.0)
+        tgt_eval = new_tot * w
+        deficits[c] = max(0.0, tgt_eval - cur_eval)
+
+    tot_deficit = sum(deficits.values())
+    allocations = {}
+    for c, d in deficits.items():
+        allocations[c] = (deposit_krw * (d / tot_deficit)) if tot_deficit > 0 else (deposit_krw * norm_w.get(c, 0.0))
+
+    orders = []
+    all_h = analysis.get('all_holdings_df', pd.DataFrame())
+
+    for cat_name, alloc_krw in allocations.items():
+        if alloc_krw < 30000:
+            continue
+
+        if cat_name == "💵 안전 현금":
+            orders.append({
+                "자산 팩터": cat_name,
+                "추천 계좌": "연금저축 / 해외계좌 예수금",
+                "추천 대상": "안전 현금 (CMA / 달러 예수금)",
+                "배분 금액": f"{int(alloc_krw):,}원",
+                "추천 주문": "예수금 유지 / 파킹",
+                "실행 이유": "하락장 저가 매수용 비상 탄약 버퍼 확보"
+            })
+            continue
+
+        cat_holdings = all_h[all_h['자산분류'] == cat_name] if (not all_h.empty and '자산분류' in all_h.columns) else pd.DataFrame()
+        if not cat_holdings.empty:
+            if '수익률(%)' in cat_holdings.columns:
+                top_h = cat_holdings.sort_values(by='수익률(%)', ascending=False).iloc[0]
+            elif '평가금액(원)' in cat_holdings.columns:
+                top_h = cat_holdings.sort_values(by='평가금액(원)', ascending=False).iloc[0]
+            else:
+                top_h = cat_holdings.iloc[0]
+            price = top_h.get('현재가', 0.0)
+            target_acc = top_h.get('계좌', '연금저축펀드')
+            name = top_h.get('종목명', '')
+            shares = int(alloc_krw // price) if price > 0 else 0
+            buy_val = shares * price if price > 0 else alloc_krw
+
+            orders.append({
+                "자산 팩터": cat_name,
+                "추천 계좌": target_acc,
+                "추천 대상": f"{name} ({top_h.get('티커', '')})",
+                "배분 금액": f"{int(buy_val if shares > 0 else alloc_krw):,}원",
+                "추천 주문": f"{shares}주 분할 매수" if shares > 0 else "분할 매수",
+                "실행 이유": f"목표 대비 {int(deficits.get(cat_name, 0)):,}원 부족분 최우선 채우기"
+            })
+        else:
+            orders.append({
+                "자산 팩터": cat_name,
+                "추천 계좌": "절세 계좌 (연금/ISA)",
+                "추천 대상": f"{cat_name} 대표 ETF",
+                "배분 금액": f"{int(alloc_krw):,}원",
+                "추천 주문": "분할 매수",
+                "실행 이유": "신규 자산군 확충 (목표 대비 결핍)"
+            })
+
+    return orders
 
 
 def parse_pasted_csv_text(csv_text: str) -> dict:

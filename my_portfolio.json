@@ -2,13 +2,13 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 310949,
+      "cash_krw": 56545,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "360750.KS",
           "name": "TIGER 미국S&P500",
-          "shares": 124,
+          "shares": 126,
           "avg_price": 25500,
           "dividend_yield": 0.9,
           "target_weight": 0.35
@@ -16,32 +16,32 @@
         {
           "ticker": "487230.KS",
           "name": "KODEX 미국AI전력핵심인프라",
-          "shares": 170,
-          "avg_price": 22982,
+          "shares": 175,
+          "avg_price": 22743,
           "dividend_yield": 0.4,
           "target_weight": 0.2
         },
         {
           "ticker": "402970.KS",
           "name": "ACE 미국배당다우존스",
-          "shares": 192,
-          "avg_price": 14211,
+          "shares": 195,
+          "avg_price": 14224,
           "dividend_yield": 2.8,
           "target_weight": 0.2
         },
         {
           "ticker": "102110.KS",
           "name": "TIGER 200",
-          "shares": 19,
-          "avg_price": 99237,
+          "shares": 20,
+          "avg_price": 99059,
           "dividend_yield": 1.0,
           "target_weight": 0.1
         },
         {
           "ticker": "0053L0.KS",
           "name": "TIGER 차이나휴머노이드로봇",
-          "shares": 276,
-          "avg_price": 11653,
+          "shares": 279,
+          "avg_price": 11618,
           "dividend_yield": 0.3,
           "target_weight": 0.1
         },
@@ -58,7 +58,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 217680,
+      "cash_krw": 131066,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -80,8 +80,8 @@
         {
           "ticker": "0035T0.KS",
           "name": "PLUS 글로벌휴머노이드로봇액티브",
-          "shares": 115,
-          "avg_price": 20750,
+          "shares": 120,
+          "avg_price": 20631,
           "dividend_yield": 0.5,
           "target_weight": 0.3
         }
@@ -91,7 +91,7 @@
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
       "cash_krw": 0,
-      "cash_usd": 15.58,
+      "cash_usd": 515.86,
       "holdings": [
         {
           "ticker": "FAST",
@@ -116,14 +116,6 @@
           "avg_price": 267.05,
           "dividend_yield": 3.2,
           "target_weight": 0.15
-        },
-        {
-          "ticker": "BIIB",
-          "name": "바이오젠 (BIIB)",
-          "shares": 2.0,
-          "avg_price": 217.96,
-          "dividend_yield": 0.0,
-          "target_weight": 0.1
         },
         {
           "ticker": "MUU",
@@ -154,22 +146,22 @@
     },
     "ISA": {
       "type": "장기적립",
-      "cash_krw": 300095,
+      "cash_krw": 1410,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "368590.KS",
           "name": "RISE 미국나스닥100",
-          "shares": 139,
-          "avg_price": 30471,
+          "shares": 143,
+          "avg_price": 30405,
           "dividend_yield": 0.5,
           "target_weight": 0.6
         },
         {
           "ticker": "446720.KS",
           "name": "SOL 미국배당다우존스",
-          "shares": 183,
-          "avg_price": 13810,
+          "shares": 197,
+          "avg_price": 13805,
           "dividend_yield": 3.0,
           "target_weight": 0.4
         }
@@ -193,7 +185,7 @@
           "ticker": "IRP",
           "name": "IRP",
           "shares": 1.0,
-          "avg_price": 3020034,
+          "avg_price": 3038162,
           "dividend_yield": 0.0,
           "target_weight": 0.05
         }
@@ -285,6 +277,12 @@
       "equity": 38315187.0,
       "cost": 37500000.0,
       "return_pct": 2.17
+    },
+    {
+      "date": "2026-11-04",
+      "equity": 38776115.0,
+      "cost": 37500000.0,
+      "return_pct": 3.4
     }
   ]
 }

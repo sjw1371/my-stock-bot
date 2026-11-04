@@ -56,6 +56,10 @@ from portfolio_manager import (
     save_target_allocation,
     DEFAULT_ACCOUNT_TARGETS,
     DEFAULT_CATEGORY_TARGETS,
+    FACTOR_PROFILES,
+    calculate_portfolio_quant_metrics,
+    get_cross_lens_matrix,
+    calculate_smart_deposit_rebalancing,
     classify_asset_category
 )
 import importlib
@@ -65,7 +69,9 @@ from ai_advisor import (
     call_gemini_advisor,
     stream_gemini_advisor,
     build_portfolio_context,
-    get_rule_based_fallback_advisor,
+    run_expert_quant_advisor,
+    load_ai_config,
+    save_ai_config,
     QUICK_PROMPTS,
     GEMINI_MODELS
 )
@@ -542,101 +548,184 @@ with tab_my_account:
 
 
 # ==============================================================================
-# 탭 2: [자산 배분] Dual-Lens 포트폴리오 빌더 & What-If 시뮬레이터
+# 탭 2: [자산 배분] Dual-Lens 스마트 포트폴리오 빌더 & What-If 시뮬레이터 (Institutional PB Grade)
 # ==============================================================================
 with tab_allocator:
-    st.subheader("🧭 Dual-Lens 스마트 자산 배분 & 포트폴리오 빌더")
-    st.markdown("내 전체 자산(약 **3,900만 원**)을 **[6대 자산 팩터]**와 **[5대 계좌]**의 듀얼 렌즈로 진단하고, 목표 포트폴리오 비중을 슬라이더로 조절하여 **리밸런싱 매매 금액** 및 **예상 연간 배당금 변화**를 실시간으로 시뮬레이션합니다.")
+    # 1. 포트폴리오 모듈 및 데이터 핫 리로드 (최신 코드 및 데이터 즉시 동기화)
+    import importlib
+    import portfolio_manager
+    importlib.reload(portfolio_manager)
+    
+    raw_p_data = portfolio_manager.load_portfolio_data()
+    my_analysis = portfolio_manager.analyze_my_portfolio(raw_p_data)
+    total_equity = my_analysis['total_net_worth']
+
+    st.markdown('<div style="font-size: 1.6rem; font-weight: 700; color: #1E3A8A; margin-bottom: 4px;">🧭 Dual-Lens 스마트 자산 배분 & 포트폴리오 빌더</div>', unsafe_allow_html=True)
+    st.markdown(
+        f"대표님의 전체 자산(실시간 평가: **{int(total_equity):,}원**, 순투입: **{int(my_analysis['total_cost_basis']):,}원**)을 "
+        f"**[6대 자산 팩터 렌즈]**와 **[5대 절세 계좌 렌즈]**의 입체적 듀얼 렌즈로 정밀 진단합니다. "
+        f"글로벌 기관투자가급 퀀트 지표(기대수익률, 샤프지수, 위기 낙폭, 월 배당)를 실시간 시뮬레이션하고, "
+        f"기존 주식을 팔지 않고 월 적립금으로 최적 비중을 맞추는 **No-Sell 스마트 입금 리밸런싱 주문표**를 원클릭으로 생성합니다."
+    )
+
+    st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 🌟 Step 1: AI 3대 투자 전략 프리셋
+    # 🌟 Step 1: AI 글로벌 기관 자산배분 모델 4대 프리셋
     # --------------------------------------------------------------------------
-    st.markdown("### 🌟 Step 1: AI 3대 투자 전략 프리셋 (원클릭 세팅)")
+    st.markdown("### 🌟 Step 1: AI 글로벌 기관 자산배분 모델 4대 프리셋 (원클릭 세팅)")
     
     preset_choice = st.radio(
-        "추천 자산 배분 모델을 선택하거나 직접 슬라이더로 커스텀 설정하세요:",
+        "글로벌 거장들의 검증된 포트폴리오 모델을 선택하거나, 직접 슬라이더로 맞춤 조정하세요:",
         options=[
-            "⚖️ [밸런스 Dual-Track (추천)] (글로벌 코어 35% + 고배당 30% + 테마/혁신 15% + 퀀트스윙 10% + 현금 8% + 코인 2%)",
-            "🔥 [공격적 복리 성장형] (글로벌 코어 45% + 테마/혁신 25% + 퀀트스윙 15% + 고배당 5% + 현금 8% + 코인 2%)",
-            "🛡️ [배당 인컴 & 방어형] (고배당 50% + 글로벌 코어 25% + 안전현금 15% + 테마/스윙 10%)",
+            "⚖️ [JTI 밸런스 Dual-Track (추천)] (코어 35% + 고배당 30% + 테마 15% + 스윙 10% + 현금 8% + 코인 2%)",
+            "🦅 [레이 달리오 All-Weather 인컴 안정형] (고배당 45% + 코어 25% + 안전현금 20% + 테마 10%)",
+            "🚀 [피터 린치 & 미너비니 공격 복리성장형] (코어 40% + 테마 25% + 퀀트스윙 20% + 고배당 5% + 현금 8% + 코인 2%)",
+            "💎 [나심 탈레브 바벨 인컴 & 혁신 전략] (코어/고배당/현금 80% + 테마/스윙/코인 20%)",
             "🎛️ [사용자 직접 커스텀 조절]"
         ],
         index=0
     )
 
-    preset_map = {
-        "⚖️ [밸런스 Dual-Track (추천)] (글로벌 코어 35% + 고배당 30% + 테마/혁신 15% + 퀀트스윙 10% + 현금 8% + 코인 2%)": {
-            "🌱 글로벌 코어 지수": 35,
-            "💰 고배당 & 인컴": 30,
-            "🤖 테마 & 미래혁신": 15,
-            "🚀 퀀트 스윙 & 모멘텀": 10,
-            "🪙 대체자산 (코인)": 2,
-            "💵 안전 현금": 8
+    preset_cat_map = {
+        "⚖️ [JTI 밸런스 Dual-Track (추천)] (코어 35% + 고배당 30% + 테마 15% + 스윙 10% + 현금 8% + 코인 2%)": {
+            "🌱 글로벌 코어 지수": 35, "💰 고배당 & 인컴": 30, "🤖 테마 & 미래혁신": 15, "🚀 퀀트 스윙 & 모멘텀": 10, "🪙 대체자산 (코인)": 2, "💵 안전 현금": 8
         },
-        "🔥 [공격적 복리 성장형] (글로벌 코어 45% + 테마/혁신 25% + 퀀트스윙 15% + 고배당 5% + 현금 8% + 코인 2%)": {
-            "🌱 글로벌 코어 지수": 45,
-            "💰 고배당 & 인컴": 5,
-            "🤖 테마 & 미래혁신": 25,
-            "🚀 퀀트 스윙 & 모멘텀": 15,
-            "🪙 대체자산 (코인)": 2,
-            "💵 안전 현금": 8
+        "🦅 [레이 달리오 All-Weather 인컴 안정형] (고배당 45% + 코어 25% + 안전현금 20% + 테마 10%)": {
+            "🌱 글로벌 코어 지수": 25, "💰 고배당 & 인컴": 45, "🤖 테마 & 미래혁신": 10, "🚀 퀀트 스윙 & 모멘텀": 0, "🪙 대체자산 (코인)": 0, "💵 안전 현금": 20
         },
-        "🛡️ [배당 인컴 & 방어형] (고배당 50% + 글로벌 코어 25% + 안전현금 15% + 테마/스윙 10%)": {
-            "🌱 글로벌 코어 지수": 25,
-            "💰 고배당 & 인컴": 50,
-            "🤖 테마 & 미래혁신": 5,
-            "🚀 퀀트 스윙 & 모멘텀": 5,
-            "🪙 대체자산 (코인)": 0,
-            "💵 안전 현금": 15
+        "🚀 [피터 린치 & 미너비니 공격 복리성장형] (코어 40% + 테마 25% + 퀀트스윙 20% + 고배당 5% + 현금 8% + 코인 2%)": {
+            "🌱 글로벌 코어 지수": 40, "💰 고배당 & 인컴": 5, "🤖 테마 & 미래혁신": 25, "🚀 퀀트 스윙 & 모멘텀": 20, "🪙 대체자산 (코인)": 2, "💵 안전 현금": 8
+        },
+        "💎 [나심 탈레브 바벨 인컴 & 혁신 전략] (코어/고배당/현금 80% + 테마/스윙/코인 20%)": {
+            "🌱 글로벌 코어 지수": 35, "💰 고배당 & 인컴": 35, "🤖 테마 & 미래혁신": 12, "🚀 퀀트 스윙 & 모멘텀": 6, "🪙 대체자산 (코인)": 2, "💵 안전 현금": 10
         }
     }
 
-    current_saved_targets = raw_p_data.get("target_allocation", {}).get("categories", DEFAULT_CATEGORY_TARGETS)
-    
-    if preset_choice in preset_map:
-        selected_weights = preset_map[preset_choice]
+    preset_acc_map = {
+        "⚖️ [JTI 밸런스 Dual-Track (추천)] (코어 35% + 고배당 30% + 테마 15% + 스윙 10% + 현금 8% + 코인 2%)": {
+            "연금저축펀드": 40, "일반계좌(해외)": 25, "ISA": 20, "일반계좌(국내)": 10, "IRP및코인": 5
+        },
+        "🦅 [레이 달리오 All-Weather 인컴 안정형] (고배당 45% + 코어 25% + 안전현금 20% + 테마 10%)": {
+            "연금저축펀드": 45, "ISA": 25, "일반계좌(해외)": 15, "일반계좌(국내)": 10, "IRP및코인": 5
+        },
+        "🚀 [피터 린치 & 미너비니 공격 복리성장형] (코어 40% + 테마 25% + 퀀트스윙 20% + 고배당 5% + 현금 8% + 코인 2%)": {
+            "일반계좌(해외)": 35, "연금저축펀드": 30, "ISA": 20, "일반계좌(국내)": 10, "IRP및코인": 5
+        },
+        "💎 [나심 탈레브 바벨 인컴 & 혁신 전략] (코어/고배당/현금 80% + 테마/스윙/코인 20%)": {
+            "연금저축펀드": 40, "ISA": 25, "일반계좌(해외)": 20, "일반계좌(국내)": 10, "IRP및코인": 5
+        }
+    }
+
+    current_saved_cat_targets = raw_p_data.get("target_allocation", {}).get("categories", DEFAULT_CATEGORY_TARGETS)
+    current_saved_acc_targets = raw_p_data.get("target_allocation", {}).get("accounts", DEFAULT_ACCOUNT_TARGETS)
+
+    if preset_choice in preset_cat_map:
+        selected_cat_weights = preset_cat_map[preset_choice]
+        selected_acc_weights = preset_acc_map.get(preset_choice, {k: int(v * 100) for k, v in DEFAULT_ACCOUNT_TARGETS.items()})
     else:
-        selected_weights = {k: int(v * 100) if v <= 1.0 else int(v) for k, v in current_saved_targets.items()}
+        selected_cat_weights = {k: int(v * 100) if v <= 1.0 else int(v) for k, v in current_saved_cat_targets.items()}
+        selected_acc_weights = {k: int(v * 100) if v <= 1.0 else int(v) for k, v in current_saved_acc_targets.items()}
 
     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 🎛️ Step 2: What-If 인터랙티브 슬라이더 & 비포/애프터 비교
+    # 🎛️ Step 2: Dual-Lens 인터랙티브 컨트롤 타워 & 실시간 퀀트 계기판
     # --------------------------------------------------------------------------
-    st.markdown("### 🎛️ Step 2: What-If 인터랙티브 슬라이더 & 비포/애프터 실시간 비교")
+    st.markdown("### 🎛️ Step 2: Dual-Lens 인터랙티브 조절기 & 실시간 퀀트 계기판 (What-If)")
 
-    sim_col1, sim_col2 = st.columns([1.1, 1.3])
+    ctrl_col, dash_col = st.columns([1.1, 1.3])
 
-    with sim_col1:
-        st.markdown("**📊 6대 자산 팩터별 목표 비중 설정 (%)**")
-        sim_core = st.slider("🌱 글로벌 코어 지수 (%)", 0, 100, selected_weights.get("🌱 글로벌 코어 지수", 35), step=1)
-        sim_div = st.slider("💰 고배당 & 인컴 (%)", 0, 100, selected_weights.get("💰 고배당 & 인컴", 30), step=1)
-        sim_theme = st.slider("🤖 테마 & 미래혁신 (%)", 0, 100, selected_weights.get("🤖 테마 & 미래혁신", 15), step=1)
-        sim_swing = st.slider("🚀 퀀트 스윙 & 모멘텀 (%)", 0, 100, selected_weights.get("🚀 퀀트 스윙 & 모멘텀", 10), step=1)
-        sim_coin = st.slider("🪙 대체자산 (코인) (%)", 0, 20, selected_weights.get("🪙 대체자산 (코인)", 2), step=1)
-        sim_cash = st.slider("💵 안전 현금 (%)", 0, 50, selected_weights.get("💵 안전 현금", 8), step=1)
+    with ctrl_col:
+        lens_subtab1, lens_subtab2 = st.tabs([
+            "렌즈 1: 📊 6대 자산 팩터 배분",
+            "렌즈 2: 🏦 5대 절세 계좌 배분"
+        ])
 
-        total_sim_weight = sim_core + sim_div + sim_theme + sim_swing + sim_coin + sim_cash
-        if total_sim_weight == 100:
-            st.success(f"✅ 목표 비중 합계: **{total_sim_weight}%** (정상)")
-        else:
-            diff = 100 - total_sim_weight
-            st.warning(f"⚠️ 목표 비중 합계: **{total_sim_weight}%** (100%가 되도록 {'+' if diff > 0 else ''}{diff}% 조정 필요)")
+        with lens_subtab1:
+            st.caption("🌱 코어, 💰 배당, 🤖 테마, 🚀 스윙, 🪙 코인, 💵 현금의 비중을 설정합니다.")
+            sim_core = st.slider("🌱 글로벌 코어 지수 (%)", 0, 100, selected_cat_weights.get("🌱 글로벌 코어 지수", 35), step=1, key="slider_cat_core")
+            sim_div = st.slider("💰 고배당 & 인컴 (%)", 0, 100, selected_cat_weights.get("💰 고배당 & 인컴", 30), step=1, key="slider_cat_div")
+            sim_theme = st.slider("🤖 테마 & 미래혁신 (%)", 0, 100, selected_cat_weights.get("🤖 테마 & 미래혁신", 15), step=1, key="slider_cat_theme")
+            sim_swing = st.slider("🚀 퀀트 스윙 & 모멘텀 (%)", 0, 100, selected_cat_weights.get("🚀 퀀트 스윙 & 모멘텀", 10), step=1, key="slider_cat_swing")
+            sim_coin = st.slider("🪙 대체자산 (코인) (%)", 0, 20, selected_cat_weights.get("🪙 대체자산 (코인)", 2), step=1, key="slider_cat_coin")
+            sim_cash = st.slider("💵 안전 현금 (%)", 0, 50, selected_cat_weights.get("💵 안전 현금", 8), step=1, key="slider_cat_cash")
 
-        if st.button("💾 이 배분 전략을 내 공식 목표로 영구 저장", type="primary"):
-            new_cat_targets = {
-                "🌱 글로벌 코어 지수": sim_core / 100.0,
-                "💰 고배당 & 인컴": sim_div / 100.0,
-                "🤖 테마 & 미래혁신": sim_theme / 100.0,
-                "🚀 퀀트 스윙 & 모멘텀": sim_swing / 100.0,
-                "🪙 대체자산 (코인)": sim_coin / 100.0,
-                "💵 안전 현금": sim_cash / 100.0
-            }
-            save_target_allocation(category_targets=new_cat_targets)
-            st.success("🎉 새로운 자산 배분 목표가 영구 저장되었습니다!")
-            st.rerun()
+            tot_cat_w = sim_core + sim_div + sim_theme + sim_swing + sim_coin + sim_cash
+            if tot_cat_w == 100:
+                st.success(f"✅ 팩터 목표 비중 합계: **{tot_cat_w}%** (정상)")
+            else:
+                cat_diff = 100 - tot_cat_w
+                st.warning(f"⚠️ 팩터 비중 합계: **{tot_cat_w}%** (100%가 되도록 {'+' if cat_diff > 0 else ''}{cat_diff}% 조정 필요)")
 
-    sim_targets_map = {
+            btn_col1, btn_col2 = st.columns(2)
+            with btn_col1:
+                if st.button("⚖️ 팩터 100% 자동 맞춤", key="btn_norm_cat"):
+                    if tot_cat_w > 0:
+                        sim_core = int(round(sim_core / tot_cat_w * 100))
+                        sim_div = int(round(sim_div / tot_cat_w * 100))
+                        sim_theme = int(round(sim_theme / tot_cat_w * 100))
+                        sim_swing = int(round(sim_swing / tot_cat_w * 100))
+                        sim_coin = int(round(sim_coin / tot_cat_w * 100))
+                        sim_cash = 100 - (sim_core + sim_div + sim_theme + sim_swing + sim_coin)
+                        st.rerun()
+
+            with btn_col2:
+                if st.button("💾 이 팩터 목표 영구 저장", type="primary", key="btn_save_cat"):
+                    norm_denom = tot_cat_w if tot_cat_w > 0 else 100
+                    new_cat_targets = {
+                        "🌱 글로벌 코어 지수": round(sim_core / norm_denom, 4),
+                        "💰 고배당 & 인컴": round(sim_div / norm_denom, 4),
+                        "🤖 테마 & 미래혁신": round(sim_theme / norm_denom, 4),
+                        "🚀 퀀트 스윙 & 모멘텀": round(sim_swing / norm_denom, 4),
+                        "🪙 대체자산 (코인)": round(sim_coin / norm_denom, 4),
+                        "💵 안전 현금": round(sim_cash / norm_denom, 4)
+                    }
+                    save_target_allocation(category_targets=new_cat_targets)
+                    st.success("🎉 6대 자산 팩터 목표가 영구 저장되었습니다!")
+                    st.rerun()
+
+        with lens_subtab2:
+            st.caption("🏦 세제 혜택(과세이연/비과세)과 운용 목적에 맞춘 계좌별 목표 비중을 설정합니다.")
+            sim_acc_pension = st.slider("🏛️ 연금저축펀드 (%)", 0, 100, selected_acc_weights.get("연금저축펀드", 40), step=1, key="slider_acc_pension")
+            sim_acc_overseas = st.slider("🇺🇸 일반계좌(해외) (%)", 0, 100, selected_acc_weights.get("일반계좌(해외)", 25), step=1, key="slider_acc_overseas")
+            sim_acc_isa = st.slider("🪙 ISA 계좌 (%)", 0, 100, selected_acc_weights.get("ISA", 20), step=1, key="slider_acc_isa")
+            sim_acc_domestic = st.slider("🇰🇷 일반계좌(국내) (%)", 0, 100, selected_acc_weights.get("일반계좌(국내)", 10), step=1, key="slider_acc_domestic")
+            sim_acc_irp = st.slider("🛡️ IRP 및 코인 (%)", 0, 50, selected_acc_weights.get("IRP및코인", 5), step=1, key="slider_acc_irp")
+
+            tot_acc_w = sim_acc_pension + sim_acc_overseas + sim_acc_isa + sim_acc_domestic + sim_acc_irp
+            if tot_acc_w == 100:
+                st.success(f"✅ 계좌 목표 비중 합계: **{tot_acc_w}%** (정상)")
+            else:
+                acc_diff = 100 - tot_acc_w
+                st.warning(f"⚠️ 계좌 비중 합계: **{tot_acc_w}%** (100%가 되도록 {'+' if acc_diff > 0 else ''}{acc_diff}% 조정 필요)")
+
+            acc_btn_col1, acc_btn_col2 = st.columns(2)
+            with acc_btn_col1:
+                if st.button("⚖️ 계좌 100% 자동 맞춤", key="btn_norm_acc"):
+                    if tot_acc_w > 0:
+                        sim_acc_pension = int(round(sim_acc_pension / tot_acc_w * 100))
+                        sim_acc_overseas = int(round(sim_acc_overseas / tot_acc_w * 100))
+                        sim_acc_isa = int(round(sim_acc_isa / tot_acc_w * 100))
+                        sim_acc_domestic = int(round(sim_acc_domestic / tot_acc_w * 100))
+                        sim_acc_irp = 100 - (sim_acc_pension + sim_acc_overseas + sim_acc_isa + sim_acc_domestic)
+                        st.rerun()
+
+            with acc_btn_col2:
+                if st.button("💾 이 계좌 목표 영구 저장", type="primary", key="btn_save_acc"):
+                    norm_acc_denom = tot_acc_w if tot_acc_w > 0 else 100
+                    new_acc_targets = {
+                        "연금저축펀드": round(sim_acc_pension / norm_acc_denom, 4),
+                        "일반계좌(해외)": round(sim_acc_overseas / norm_acc_denom, 4),
+                        "ISA": round(sim_acc_isa / norm_acc_denom, 4),
+                        "일반계좌(국내)": round(sim_acc_domestic / norm_acc_denom, 4),
+                        "IRP및코인": round(sim_acc_irp / norm_acc_denom, 4)
+                    }
+                    save_target_allocation(account_targets=new_acc_targets)
+                    st.success("🎉 5대 계좌 목표가 영구 저장되었습니다!")
+                    st.rerun()
+
+    sim_cat_weights = {
         "🌱 글로벌 코어 지수": sim_core,
         "💰 고배당 & 인컴": sim_div,
         "🤖 테마 & 미래혁신": sim_theme,
@@ -645,60 +734,68 @@ with tab_allocator:
         "💵 안전 현금": sim_cash
     }
 
-    total_equity = my_analysis['total_net_worth']
-    
-    # 예상 배당금 계산 (고배당 평균 4.5%, 코어 1.3%, 테마 0.5%, 기타 0%)
-    sim_div_krw = (total_equity * (sim_div / 100.0) * 0.045) + (total_equity * (sim_core / 100.0) * 0.013) + (total_equity * (sim_theme / 100.0) * 0.005)
-    current_div_krw = my_analysis['total_annual_dividend_krw']
-    div_delta_krw = sim_div_krw - current_div_krw
+    # --------------------------------------------------------------------------
+    # 📊 실시간 퀀트 지표 연산 (Institutional Metrics)
+    # --------------------------------------------------------------------------
+    quant_res = calculate_portfolio_quant_metrics(sim_cat_weights, total_equity)
 
-    with sim_col2:
-        d_m1, d_m2, d_m3 = st.columns(3)
-        with d_m1:
+    with dash_col:
+        st.markdown("**📊 기관투자가급 포트폴리오 퀀트 계기판 (실시간 연산)**")
+
+        k1, k2, k3 = st.columns(3)
+        with k1:
+            h_score = quant_res['health_score']
+            h_badge = "🟢 최상급" if h_score >= 85 else ("🔵 우수" if h_score >= 70 else "🟡 편중 주의")
+            st.metric("🎯 밸런스 지수", f"{h_score}점 / 100", delta=h_badge)
+        with k2:
+            st.metric("📈 기대 연수익률(CAGR)", f"+{quant_res['expected_cagr']*100:.1f}%", delta="자산 가중 성장률")
+        with k3:
+            st.metric("🛡️ 포트폴리오 변동성", f"{quant_res['portfolio_volatility']*100:.1f}%", delta=f"샤프: {quant_res['sharpe_ratio']:.2f}")
+
+        k4, k5, k6 = st.columns(3)
+        with k4:
             st.metric(
-                label="💰 시뮬레이션 예상 연배당",
-                value=f"연 {int(sim_div_krw):,}원",
-                delta=f"{int(div_delta_krw):+,}원 ({'증가' if div_delta_krw >= 0 else '감소'})"
+                "💰 예상 연간 배당금",
+                f"연 {int(quant_res['annual_dividend_krw']):,}원",
+                delta=f"배당률 {quant_res['dividend_yield']*100:.2f}%"
             )
-        with d_m2:
+        with k5:
             st.metric(
-                label="💵 시뮬레이션 월배당",
-                value=f"월 {int(sim_div_krw / 12):,}원",
-                delta=f"연 배당률 {(sim_div_krw / total_equity * 100):.2f}%"
+                "💵 예상 월간 배당금",
+                f"월 {int(quant_res['monthly_dividend_krw']):,}원",
+                delta=f"안전 현금 {quant_res['normalized_weights'].get('💵 안전 현금', 0)*100:.0f}%"
             )
-        with d_m3:
-            growth_ratio = sim_core + sim_theme + sim_swing
-            income_ratio = sim_div
+        with k6:
             st.metric(
-                label="⚖️ 성장형 vs 인컴형 비율",
-                value=f"{growth_ratio}% : {income_ratio}%",
-                delta=f"현금 {sim_cash}%"
+                "⚖️ 성장 vs 인컴 비율",
+                f"{quant_res['growth_ratio']}% : {quant_res['income_ratio']}%",
+                delta="성장형 우위" if quant_res['growth_ratio'] > quant_res['income_ratio'] else "인컴 우위"
             )
 
+        # 도넛 차트 비교 (현재 vs 시뮬레이션 목표)
         ch_c1, ch_c2 = st.columns(2)
-        
         cat_labels = list(my_analysis['categories_data'].keys())
         cat_curr_vals = [my_analysis['categories_data'][k]['eval_krw'] for k in cat_labels]
         fig_curr_cat = go.Figure(data=[go.Pie(
             labels=cat_labels,
             values=cat_curr_vals,
-            hole=.45,
+            hole=.48,
             textinfo='percent',
-            title='현재 포트폴리오',
+            title=dict(text='현재 포트폴리오', font=dict(size=13, color='#1E293B')),
             marker=dict(colors=['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#64748B'])
         )])
-        fig_curr_cat.update_layout(height=240, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
+        fig_curr_cat.update_layout(height=230, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
 
-        cat_sim_vals = [sim_targets_map.get(k, 0) for k in cat_labels]
+        cat_sim_vals = [sim_cat_weights.get(k, 0) for k in cat_labels]
         fig_sim_cat = go.Figure(data=[go.Pie(
             labels=cat_labels,
             values=cat_sim_vals,
-            hole=.45,
+            hole=.48,
             textinfo='percent',
-            title='시뮬레이션 목표',
+            title=dict(text='시뮬레이션 목표', font=dict(size=13, color='#1E293B')),
             marker=dict(colors=['#3B82F6', '#10B981', '#8B5CF6', '#F59E0B', '#EC4899', '#64748B'])
         )])
-        fig_sim_cat.update_layout(height=240, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
+        fig_sim_cat.update_layout(height=230, margin=dict(t=20, b=20, l=10, r=10), showlegend=False)
 
         with ch_c1:
             st.plotly_chart(fig_curr_cat, use_container_width=True)
@@ -708,67 +805,183 @@ with tab_allocator:
     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 📋 Step 3: 6대 자산 팩터별 리밸런싱 실행 계획표
+    # 🗺️ Step 3: 5대 계좌 × 6대 자산 팩터 크로스 매트릭스 & 세제 최적화 진단
     # --------------------------------------------------------------------------
-    st.markdown("### 📋 Step 3: 6대 자산 팩터별 리밸런싱 실행 계획표")
-    
-    rebal_rows = []
-    for cat_name, cat_info in my_analysis['categories_data'].items():
-        curr_eval = cat_info['eval_krw']
-        curr_w = (curr_eval / total_equity * 100.0) if total_equity > 0 else 0.0
-        tgt_w = float(sim_targets_map.get(cat_name, 0.0))
-        tgt_eval = total_equity * (tgt_w / 100.0)
-        rebal_krw = tgt_eval - curr_eval
-        
-        h_names = [h['종목명'] for h in cat_info['holdings']]
-        h_str = ", ".join(h_names) if h_names else "현금 잔고"
-        
-        if abs(rebal_krw) < 100000:
-            act_text = "🟢 비중 적정 (유지)"
-        elif rebal_krw > 0:
-            act_text = f"🔵 +{int(rebal_krw):,}원 추가 매수/적립"
-        else:
-            act_text = f"🟠 -{int(abs(rebal_krw)):,}원 이익 실현/축소"
+    st.markdown("### 🗺️ Step 3: 5대 계좌 × 6대 자산 팩터 크로스 매트릭스 & 세제 최적화 진단 (Asset Location)")
+    st.caption("어느 계좌에 어떤 자산군이 배치되어 있는지 전수 분석하고, 배당소득세(15.4%) 및 양도소득세(22%) 절세 효율성을 평가합니다.")
 
-        rebal_rows.append({
-            "자산 팩터": cat_name,
-            "현재 평가액": f"{int(curr_eval):,}원",
-            "현재 비중": f"{curr_w:.1f}%",
-            "목표 비중": f"{tgt_w:.0f}%",
-            "목표 평가액": f"{int(tgt_eval):,}원",
-            "조정 필요 금액": act_text,
-            "포함된 내 보유 종목": h_str
-        })
+    cross_data = get_cross_lens_matrix(my_analysis)
+    matrix_df = cross_data['matrix_df']
 
-    st.dataframe(
-        pd.DataFrame(rebal_rows),
-        use_container_width=True,
-        hide_index=True,
-        column_config={
-            "자산 팩터": st.column_config.TextColumn("자산 팩터", width="medium"),
-            "현재 평가액": st.column_config.TextColumn("현재 평가액", width="small"),
-            "현재 비중": st.column_config.TextColumn("현재 비중", width="small"),
-            "목표 비중": st.column_config.TextColumn("목표 비중", width="small"),
-            "목표 평가액": st.column_config.TextColumn("목표 평가액", width="small"),
-            "조정 필요 금액": st.column_config.TextColumn("리밸런싱 실행 제언", width="medium"),
-            "포함된 내 보유 종목": st.column_config.TextColumn("포함된 내 종목", width="large")
-        }
-    )
+    # 매트릭스 테이블 출력 (Pandas 1.x & 2.x 호환)
+    format_cell = lambda x: f"{int(x):,}원" if (isinstance(x, (int, float)) and x > 0) else ("-" if isinstance(x, (int, float)) else str(x))
+    if hasattr(matrix_df, 'map'):
+        disp_matrix = matrix_df.map(format_cell)
+    else:
+        disp_matrix = matrix_df.applymap(format_cell)
+    st.dataframe(disp_matrix, use_container_width=True)
+
+    # 3대 세제 최적화 진단 카드
+    t_c1, t_c2, t_c3 = st.columns(3)
+    with t_c1:
+        tax_pct = cross_data['tax_favored_pct']
+        t_badge = "🟢 우수" if tax_pct >= 50 else "🟡 비중 확대 권장"
+        st.info(
+            f"🏛️ **절세 계좌 비중 (연금+ISA+IRP)**: **{tax_pct:.1f}%** ({t_badge})\n\n"
+            f"- 현재 절세 계좌 총 자산: 약 **{int(cross_data['tax_favored_eval']):,}원**\n"
+            f"- 매매차익 비과세 및 배당소득세(15.4%) 과세이연 효과가 복리로 작동 중입니다."
+        )
+    with t_c2:
+        taxable_div = cross_data['taxable_dividend_krw']
+        taxable_div_pct = cross_data['taxable_dividend_pct']
+        st.warning(
+            f"⚠️ **일반계좌 고배당 비중 진단**: **{int(taxable_div):,}원** ({taxable_div_pct:.1f}%)\n\n"
+            f"- 일반계좌(해외/국내)에서 매년 약 **{int(taxable_div * 0.042 * 0.154):,}원**의 배당세 원천징수 발생 추정.\n"
+            f"- 향후 ISA나 연금저축 한도가 남을 경우 국내상장 해외배당 ETF로 점진적 이전을 권장합니다."
+        )
+    with t_c3:
+        st.success(
+            f"🎯 **해외계좌 양도세 250만 원 공제 활용도**\n\n"
+            f"- 일반계좌(해외) 평가액: **{int(matrix_df.loc['일반계좌(해외)', '계좌 합계']):,}원**\n"
+            f"- 시세차익형(MUU, EXPD, NVDA 등)은 매년 250만 원 기본공제를 활용하여 세금 0원으로 수익을 확정할 수 있습니다."
+        )
 
     st.markdown("---")
 
     # --------------------------------------------------------------------------
-    # 🏦 Step 4: 5대 계좌별 세제 혜택 극대화 & 자금 배분 전략
+    # 📋 Step 4: 스마트 리밸런싱 실행 센터 (2가지 모드)
     # --------------------------------------------------------------------------
-    st.markdown("### 🏦 Step 4: 5대 계좌별 세제 혜택 극대화 & 자금 배분 가이드")
-    
-    k_col1, k_col2, k_col3 = st.columns(3)
-    with k_col1:
-        st.info("💡 **연금저축펀드 (목표 40%)**\n\n- 연간 600만 원 한도 세액공제(13.2~16.5% 환급)\n- 배당소득세(15.4%) 과세이연 혜택\n- 추천 자산: `TIGER 미국S&P500`, `ACE 미국배당다우존스`")
-    with k_col2:
-        st.info("💡 **ISA 계좌 (목표 20%)**\n\n- 순손익 200만~400만 원 비과세, 초과분 9.9% 분리과세\n- 국내상장 해외 ETF 및 고배당주 최적\n- 추천 자산: `SOL 미국배당다우존스`, `RISE 미국나스닥100`")
-    with k_col3:
-        st.info("💡 **일반계좌 (해외 25% / 국내 10%)**\n\n- 해외 주식: 연간 250만 원 양도소득세 기본공제\n- 단기 퀀트 스윙(SEPA VCP) 및 글로벌 우량 배당주\n- 추천 자산: `FAST`, `KO`, `JNJ`, `NVDA`, `MSFT`")
+    st.markdown("### 📋 Step 4: 스마트 리밸런싱 실행 센터")
+
+    rebal_tab1, rebal_tab2 = st.tabs([
+        "💡 [모드 1] 스마트 신규 입금 리밸런싱 (No-Sell, 월 적립금 유입으로 갭 메우기)",
+        "🔄 [모드 2] 보유 자산 매도/매수 정밀 리밸런싱 (Full Portfolio Rebalancing)"
+    ])
+
+    with rebal_tab1:
+        st.markdown(
+            "기존 주식을 굳이 팔지 않고, **이번 달에 내가 추가로 적립/투자할 현금**을 "
+            "현재 목표 비중에서 가장 부족한 자산군과 계좌로 스마트 배분하여 1원 단위까지 분할 매수 주문서를 자동 산출합니다."
+        )
+
+        inflow_col1, inflow_col2 = st.columns([1, 2])
+        with inflow_col1:
+            deposit_input = st.slider(
+                "💵 이번 달 추가 투자(적립) 금액 (원)",
+                min_value=100000,
+                max_value=5000000,
+                value=1000000,
+                step=100000,
+                help="이번 달 월급이나 여유 자금에서 추가 입금할 금액을 입력하세요."
+            )
+            st.metric("🎯 신규 투입 총액", f"{int(deposit_input):,}원")
+
+        with inflow_col2:
+            deposit_orders = calculate_smart_deposit_rebalancing(my_analysis, deposit_input, sim_cat_weights)
+            if deposit_orders:
+                st.markdown(f"**📌 이번 달 {int(deposit_input):,}원 스마트 분할 매수 실행 주문표:**")
+                st.dataframe(pd.DataFrame(deposit_orders), use_container_width=True, hide_index=True)
+            else:
+                st.info("현재 모든 자산군이 목표 비중에 완벽히 도달해 있습니다.")
+
+    with rebal_tab2:
+        st.markdown("현재 총자산 내에서 비중이 초과된 자산을 매도하여 부족한 자산군을 채우는 전수 리밸런싱 계획표입니다.")
+        
+        rebal_rows = []
+        for cat_name, cat_info in my_analysis['categories_data'].items():
+            curr_eval = cat_info['eval_krw']
+            curr_w = (curr_eval / total_equity * 100.0) if total_equity > 0 else 0.0
+            tgt_w = float(sim_cat_weights.get(cat_name, 0.0))
+            tgt_eval = total_equity * (tgt_w / 100.0)
+            rebal_krw = tgt_eval - curr_eval
+            
+            h_names = [h['종목명'] for h in cat_info['holdings']]
+            h_str = ", ".join(h_names) if h_names else "현금 잔고"
+            
+            if abs(rebal_krw) < 100000:
+                act_text = "🟢 비중 적정 (유지)"
+            elif rebal_krw > 0:
+                act_text = f"🔵 +{int(rebal_krw):,}원 추가 매수/적립"
+            else:
+                act_text = f"🟠 -{int(abs(rebal_krw)):,}원 이익 실현/축소"
+
+            rebal_rows.append({
+                "자산 팩터": cat_name,
+                "현재 평가액": f"{int(curr_eval):,}원",
+                "현재 비중": f"{curr_w:.1f}%",
+                "목표 비중": f"{tgt_w:.0f}%",
+                "목표 평가액": f"{int(tgt_eval):,}원",
+                "리밸런싱 실행 제언": act_text,
+                "포함된 내 보유 종목": h_str
+            })
+
+        st.dataframe(pd.DataFrame(rebal_rows), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+
+    # --------------------------------------------------------------------------
+    # 🛡️ Step 5: 과거 3대 위기 시나리오 스트레스 테스트 & AI PB 즉시 자문 연동
+    # --------------------------------------------------------------------------
+    st.markdown("### 🛡️ Step 5: 과거 3대 위기 시나리오 스트레스 테스트 & AI PB 즉시 자문 연동")
+
+    stress_col, ai_bridge_col = st.columns([1.2, 1.0])
+
+    with stress_col:
+        st.markdown("**📉 과거 대표적 3대 경제 위기 시뮬레이션 (방어력 검증)**")
+        
+        stress_df = pd.DataFrame({
+            "위기 시나리오": ["2008 금융위기", "2020 코로나 쇼크", "2022 인플레 급락장"],
+            "벤치마크 낙폭": [-50.0, -34.0, -33.0],
+            "내 포트폴리오 예상 낙폭": [
+                round(quant_res['stress_2008'] * 100, 1),
+                round(quant_res['stress_2020'] * 100, 1),
+                round(quant_res['stress_2022'] * 100, 1)
+            ]
+        })
+
+        fig_stress = go.Figure()
+        fig_stress.add_trace(go.Bar(
+            name="벤치마크 (S&P/나스닥 몰빵)",
+            x=stress_df["위기 시나리오"],
+            y=stress_df["벤치마크 낙폭"],
+            marker_color="#EF4444"
+        ))
+        fig_stress.add_trace(go.Bar(
+            name="내 시뮬레이션 포트폴리오",
+            x=stress_df["위기 시나리오"],
+            y=stress_df["내 포트폴리오 예상 낙폭"],
+            marker_color="#10B981"
+        ))
+        fig_stress.update_layout(
+            barmode="group",
+            height=260,
+            yaxis_title="예상 최대 낙폭(MDD %)",
+            margin=dict(t=20, b=20, l=20, r=20),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+        )
+        st.plotly_chart(fig_stress, use_container_width=True)
+
+    with ai_bridge_col:
+        st.markdown("**💬 월가 수석 PB 정밀 검토 및 승인 브리핑**")
+        st.markdown(
+            f"방금 설정하신 **[{preset_choice.split(']')[0].replace('⚖️ [', '').replace('🦅 [', '').replace('🚀 [', '').replace('💎 [', '')}]** 전략 "
+            f"(기대수익률 **+{quant_res['expected_cagr']*100:.1f}%**, 샤프 **{quant_res['sharpe_ratio']:.2f}**, 연배당 **{int(quant_res['annual_dividend_krw']):,}원**)을 "
+            f"전담 AI PB에게 즉시 전송하여 1:1 심층 자문과 실행 컨펌을 받으실 수 있습니다."
+        )
+
+        ai_review_prompt = (
+            f"대표님께서 방금 'Dual-Lens 스마트 자산 배분 빌더'에서 다음과 같이 포트폴리오 목표를 시뮬레이션하셨습니다:\n\n"
+            f"- 목표 팩터 비중: 코어 지수 {sim_core}%, 고배당 {sim_div}%, 테마혁신 {sim_theme}%, 퀀트스윙 {sim_swing}%, 코인 {sim_coin}%, 안전현금 {sim_cash}%\n"
+            f"- 퀀트 시뮬레이션 결과: 기대 연수익률(CAGR) +{quant_res['expected_cagr']*100:.1f}%, 변동성 {quant_res['portfolio_volatility']*100:.1f}%, 샤프지수 {quant_res['sharpe_ratio']:.2f}, 예상 연배당 {int(quant_res['annual_dividend_krw']):,}원 (월환산 {int(quant_res['monthly_dividend_krw']):,}원)\n"
+            f"- 5대 계좌 현황: 연금저축/ISA 절세 계좌 비중 {cross_data['tax_favored_pct']:.1f}%, 일반계좌 배당세 노출 {cross_data['taxable_dividend_pct']:.1f}%\n\n"
+            f"월가 수석 PB이자 마크 미너비니 퀀트 자문관으로서, 이 자산 배분이 대표님의 자산 증식과 리스크 방어 관점에서 얼마나 적합한지 정밀 검토해 주시고, "
+            f"당장 증권사 앱에서 실행해야 할 3대 구체적 액션 플랜을 두괄식으로 브리핑해 주십시오."
+        )
+
+        if st.button("💬 이 자산 배분 모델로 전담 AI PB에게 즉시 자문 받기", type="primary", use_container_width=True):
+            st.session_state["pending_ai_prompt"] = ai_review_prompt
+            st.success("🎉 전담 AI PB에게 자문 요청이 접수되었습니다! 상단 5번째 탭 [💬 AI 전담 PB]로 이동하시면 수석 PB의 정밀 검토 브리핑이 시작됩니다.")
+            st.info("💡 위 상단 탭에서 **'💬 [AI 전담 PB] 1:1 주식 자문'** 탭을 클릭해 보세요!")
 
 
 # ==============================================================================
@@ -1573,13 +1786,14 @@ with tab_ai_advisor:
     # AI 주식 자문 전용 포트폴리오 텍스트 컨텍스트 생성
     portfolio_ctx = build_portfolio_context(raw_p_data, my_analysis, macro_summary)
 
-    # 세션 상태 초기화
+    # 세션 상태 초기화 (로컬 영구 설정 파일 자동 로드)
+    saved_ai_cfg = load_ai_config()
     if "gemini_chat_history" not in st.session_state:
         st.session_state["gemini_chat_history"] = []
     if "gemini_api_key" not in st.session_state:
-        st.session_state["gemini_api_key"] = os.environ.get("GEMINI_API_KEY", "")
+        st.session_state["gemini_api_key"] = saved_ai_cfg.get("gemini_api_key", "")
     if "gemini_model" not in st.session_state:
-        st.session_state["gemini_model"] = "gemini-2.0-flash"
+        st.session_state["gemini_model"] = saved_ai_cfg.get("gemini_model", "gemini-2.0-flash")
     if "pending_ai_prompt" not in st.session_state:
         st.session_state["pending_ai_prompt"] = None
 
@@ -1619,39 +1833,54 @@ with tab_ai_advisor:
     # ⚙️ Google Gemini API 설정 및 모델 선택 (접이식)
     # --------------------------------------------------------------------------
     has_api_key = bool(st.session_state["gemini_api_key"].strip())
-    exp_label = "✅ Google Gemini API 연동 완료 (클릭하여 설정 변경)" if has_api_key else "🔑 Google Gemini 무료 API 키 설정 (클릭하여 1분 만에 등록)"
+    exp_label = (
+        "🟢 [고급 LLM 모드] Google Gemini AI 실시간 연동 활성화 (클릭하여 키 관리/변경)"
+        if has_api_key else
+        "🏛️ [기본 퀀트 모드] 월가 수석 PB & 미너비니 자체 퀀트 엔진 가동 중 (무료/API 불필요, 클릭하여 Gemini 키 등록 가능)"
+    )
     
-    with st.expander(exp_label, expanded=not has_api_key):
+    with st.expander(exp_label, expanded=False):
+        st.markdown(
+            "💡 **자체 퀀트 PB 엔진 안내**: **API 키가 없어도** 대표님의 실시간 5대 계좌 자산, 종목별 손익, 가용 예수금 데이터를 바탕으로 "
+            "**월가 수석 PB & 마크 미너비니 퀀트 엔진**이 100% 정상 작동합니다. Google Gemini 최신 모델과의 자유 대화를 원하실 때만 선택적으로 키를 등록하십시오."
+        )
         cfg_col1, cfg_col2 = st.columns([3, 2])
         with cfg_col1:
             entered_key = st.text_input(
-                "Gemini API Key (개인 무료)",
+                "Gemini API Key (선택 사항)",
                 value=st.session_state["gemini_api_key"],
                 type="password",
-                help="Google AI Studio에서 무료로 발급받은 API 키를 입력하세요. 브라우저 세션에 안전하게 유지됩니다."
+                help="Google AI Studio에서 무료로 발급받은 API 키를 입력하세요. '영구 저장' 버튼을 누르면 평생 유지됩니다.",
+                key="input_gemini_api_key"
             )
-            if entered_key != st.session_state["gemini_api_key"]:
-                st.session_state["gemini_api_key"] = entered_key
-                st.rerun()
-
         with cfg_col2:
             current_model = st.selectbox(
                 "Gemini 최신 모델 선택",
                 GEMINI_MODELS,
                 index=GEMINI_MODELS.index(st.session_state["gemini_model"]) if st.session_state["gemini_model"] in GEMINI_MODELS else 0,
-                help="개인 무료 티어 기준 가장 우수한 최신 모델들을 우선적으로 지원합니다."
+                help="개인 무료 티어 기준 가장 우수한 최신 모델들을 우선적으로 지원합니다.",
+                key="select_gemini_model"
             )
-            if current_model != st.session_state["gemini_model"]:
+
+        btn_save_col, btn_del_col = st.columns(2)
+        with btn_save_col:
+            if st.button("💾 API 키 로컬 영구 저장", use_container_width=True):
+                st.session_state["gemini_api_key"] = entered_key.strip()
                 st.session_state["gemini_model"] = current_model
+                save_ai_config(entered_key.strip(), current_model)
+                st.success("🎉 API 키가 로컬 파일에 영구 저장되었습니다! 브라우저를 새로고침하거나 껐다 켜도 계속 유지됩니다.")
+                st.rerun()
+        with btn_del_col:
+            if st.button("🗑️ API 키 삭제 (자체 엔진 모드로 복귀)", use_container_width=True):
+                st.session_state["gemini_api_key"] = ""
+                save_ai_config("", current_model)
+                st.info("API 키가 삭제되었습니다. 월가 수석 PB 자체 내장 엔진 모드로 즉시 복귀합니다.")
                 st.rerun()
 
         st.markdown(
             """
-            💡 **무료 API 키 발급 방법 (100% 무료, 신용카드 등록 불필요)**:  
-            1. [Google AI Studio (aistudio.google.com)](https://aistudio.google.com/app/apikey) 접속 (구글 계정 로그인)  
-            2. **'Create API Key'** 버튼 클릭 후 복사  
-            3. 위 입력창에 붙여넣으면 즉시 전담 AI PB가 가동됩니다!  
-            *(※ API 키가 없어도 룰 기반 기본 PB 자문이 가동되지만, 키를 등록하시면 최고 수준의 월가 LLM 맞춤 대화가 가능합니다.)*
+            ---
+            *🔑 무료 API 키가 필요하신 경우: [Google AI Studio (aistudio.google.com)](https://aistudio.google.com/app/apikey)에서 무료 발급받아 등록하실 수 있습니다.*
             """
         )
 
@@ -1742,23 +1971,16 @@ with tab_ai_advisor:
                 api_key = st.session_state.get("gemini_api_key", "").strip()
                 preferred_model = st.session_state.get("gemini_model", "gemini-2.0-flash")
                 
-                if api_key:
-                    stream_gen = stream_gemini_advisor(
-                        api_key=api_key,
-                        user_prompt=active_prompt,
-                        conversation_history=st.session_state["gemini_chat_history"][:-1],
-                        portfolio_context=portfolio_ctx,
-                        preferred_model=preferred_model
-                    )
-                    ai_reply = st.write_stream(stream_gen)
-                else:
-                    rule_reply = get_rule_based_fallback_advisor(active_prompt, my_analysis)
-                    ai_reply = (
-                        "🔑 *(알림: 상단 설정에서 무료 Gemini API 키를 등록하시면 최고 수준의 월가 AI 맞춤 대화가 가동됩니다)*\n\n"
-                        + rule_reply
-                    )
-                    st.markdown(ai_reply)
-
+                stream_gen = stream_gemini_advisor(
+                    api_key=api_key,
+                    user_prompt=active_prompt,
+                    conversation_history=st.session_state["gemini_chat_history"][:-1],
+                    portfolio_context=portfolio_ctx,
+                    preferred_model=preferred_model,
+                    analysis=my_analysis,
+                    macro_summary=macro_summary
+                )
+                ai_reply = st.write_stream(stream_gen)
                 st.session_state["gemini_chat_history"].append({"role": "assistant", "content": ai_reply})
         
         st.rerun()
