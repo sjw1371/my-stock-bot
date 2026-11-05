@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 56545,
+      "cash_krw": 12506,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -16,8 +16,8 @@
         {
           "ticker": "487230.KS",
           "name": "KODEX 미국AI전력핵심인프라",
-          "shares": 175,
-          "avg_price": 22743,
+          "shares": 178,
+          "avg_price": 22607,
           "dividend_yield": 0.4,
           "target_weight": 0.2
         },
@@ -58,7 +58,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 131066,
+      "cash_krw": 131080,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -91,7 +91,7 @@
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
       "cash_krw": 0,
-      "cash_usd": 515.86,
+      "cash_usd": 534.91,
       "holdings": [
         {
           "ticker": "FAST",
@@ -134,11 +134,11 @@
           "target_weight": 0.1
         },
         {
-          "ticker": "NVDA",
-          "name": "엔비디아",
-          "shares": 5.0,
-          "avg_price": 225.35,
-          "dividend_yield": 0.1,
+          "ticker": "SNDK",
+          "name": "샌디스크",
+          "shares": 1.0,
+          "avg_price": 992.94,
+          "dividend_yield": 0.0,
           "target_weight": 0.1
         }
       ],
@@ -283,6 +283,12 @@
       "equity": 38776115.0,
       "cost": 37500000.0,
       "return_pct": 3.4
+    },
+    {
+      "date": "2026-11-05",
+      "equity": 38676283.0,
+      "cost": 37500000.0,
+      "return_pct": 3.14
     }
   ]
 }

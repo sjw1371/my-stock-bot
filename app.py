@@ -106,6 +106,14 @@ st.markdown("""
         padding: 15px;
         box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
+    /* 모바일 스마트폰 반응형 최적화 */
+    @media (max-width: 768px) {
+        .main-header { font-size: 1.4rem !important; }
+        .sub-header { font-size: 0.85rem !important; }
+        .block-container { padding: 1rem 0.6rem !important; }
+        div[data-testid="stMetricValue"] { font-size: 1.25rem !important; }
+        div[data-testid="stMetricLabel"] { font-size: 0.8rem !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -160,6 +168,18 @@ with st.sidebar:
 
     st.markdown("---")
     run_btn = st.button("🚀 실시간 시장 퀀트 스캔 가동", type="primary", use_container_width=True)
+
+    st.markdown("---")
+    try:
+        import socket
+        _s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        _s.connect(('8.8.8.8', 80))
+        _lan_ip = _s.getsockname()[0]
+        _s.close()
+    except Exception:
+        _lan_ip = "192.168.219.106"
+    
+    st.info(f"📱 **스마트폰 모바일 접속**\n\n`http://{_lan_ip}:8501`\n\n*(PC와 같은 Wi-Fi 연결 시 즉시 접속 가능)*")
 
 
 # ==============================================================================
@@ -1991,28 +2011,25 @@ with tab_ai_advisor:
     st.markdown("---")
     with st.expander("📱 스마트폰(모바일)에서 이 대시보드 및 AI PB 바로 연동하는 방법", expanded=False):
         st.markdown(
-            """
+            f"""
             ### 📲 스마트폰 홈 화면에 'AI PB 앱'으로 등록하는 방법 (1분 소요)
             
             1. **동일 Wi-Fi 연결**:
                - PC와 스마트폰을 같은 집/사무실 Wi-Fi에 연결합니다.
                
-            2. **PC의 로컬 IP 주소 확인**:
-               - 윈도우 키 누르고 `cmd` 실행 -> `ipconfig` 입력 후 엔터
-               - `IPv4 주소` 확인 (예: `192.168.0.15`)
-               
-            3. **스마트폰 브라우저에서 접속**:
+            2. **스마트폰 브라우저에서 바로 접속**:
                - 스마트폰 사파리(아이폰) 또는 크롬(갤럭시)을 엽니다.
-               - 주소창에 `http://[확인한_PC_IPv4주소]:8501` 입력 (예: `http://192.168.0.15:8501`)
+               - 주소창에 아래 주소를 그대로 입력합니다:
+               - 👉 **`http://{_lan_ip}:8501`**
                
-            4. **홈 화면에 추가 (원터치 앱 만들기)**:
+            3. **홈 화면에 추가 (원터치 앱 만들기)**:
                - **아이폰 (Safari)**: 하단 공유 버튼(`공유` 아이콘) -> **[홈 화면에 추가]**
                - **안드로이드 (Chrome)**: 우측 상단 메뉴(`⋮`) -> **[홈 화면에 추가]**
                - 이제 스마트폰 바탕화면에 앱 아이콘이 생겨 언제든 터치 한 번으로 1:1 PB 상담을 받으실 수 있습니다!
                
-            5. **외부(LTE/5G)에서 접속하고 싶을 때**:
-               - 무료 Cloudflare 터널을 활용하면 PC가 켜져 있는 동안 전 세계 어디서든 안전한 암호화 주소(예: `https://xxx.trycloudflare.com`)로 스마트폰 접속이 가능합니다.
-               - PC 터미널에서 `cloudflared tunnel --url http://localhost:8501` 명령어 한 줄로 즉시 외부 주소가 생성됩니다.
+            4. **만약 핸드폰에서 접속 에러가 날 때 해결법**:
+               - 프로젝트 폴더의 **`방화벽_8501_허용.bat`** 파일을 마우스 우클릭 -> **[관리자 권한으로 실행]**해 주세요.
+               - 윈도우 방화벽에서 스마트폰 접속을 허용해 줍니다.
             """
         )
 
