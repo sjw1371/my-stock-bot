@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 12506,
+      "cash_krw": 12508,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -91,7 +91,7 @@
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
       "cash_krw": 0,
-      "cash_usd": 534.91,
+      "cash_usd": 57.54,
       "holdings": [
         {
           "ticker": "FAST",
@@ -136,8 +136,8 @@
         {
           "ticker": "SNDK",
           "name": "샌디스크",
-          "shares": 1.0,
-          "avg_price": 992.94,
+          "shares": 1.5,
+          "avg_price": 980.22,
           "dividend_yield": 0.0,
           "target_weight": 0.1
         }
@@ -146,14 +146,14 @@
     },
     "ISA": {
       "type": "장기적립",
-      "cash_krw": 1410,
+      "cash_krw": 10566,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "368590.KS",
           "name": "RISE 미국나스닥100",
-          "shares": 143,
-          "avg_price": 30405,
+          "shares": 146,
+          "avg_price": 30334,
           "dividend_yield": 0.5,
           "target_weight": 0.6
         },
@@ -289,6 +289,12 @@
       "equity": 38676283.0,
       "cost": 37500000.0,
       "return_pct": 3.14
+    },
+    {
+      "date": "2026-11-09",
+      "equity": 37457743.0,
+      "cost": 37500000.0,
+      "return_pct": -0.11
     }
   ]
 }
