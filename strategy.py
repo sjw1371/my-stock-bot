@@ -79,6 +79,12 @@ def evaluate_macro(macro_data: dict) -> tuple:
     us_score = sum(us_scores) / len(us_scores) if us_scores else 2.0
     kr_score = sum(kr_scores) / len(kr_scores) if kr_scores else 2.0
 
+    # ★ 가중 평균 도입: 미국(60%) 우세 — 미국 시장이 글로벌 추세의 선행 지표
+    # 단순 4지수 평균은 한국 선방 시 미국 붕괴를 과소평가하는 치명적 편향이 있음
+    weighted_score = us_score * 0.60 + kr_score * 0.40
+    # 미국 단독 붕괴 플래그 (S&P500 + 나스닥 모두 200일선 하회)
+    us_collapse = (us_score < 1.0)
+
     # 2. VIX 상세 분석
     vix_chg = macro_data.get('vix_change', 0.0)
     vix_chg_pct = macro_data.get('vix_change_pct', 0.0)
@@ -100,30 +106,34 @@ def evaluate_macro(macro_data: dict) -> tuple:
         'advice': vix_advice
     }
 
-    # 3. 글로벌 시장 상태 정밀 판정
-    if avg_score >= 2.5 and vix < 20.0:
-        market_status = "🟢 ON (강세 상승 국면)"
-        market_status_desc = f"주요 벤치마크 지수(종합 {avg_score:.2f}점 / 미국 {us_score:.1f}점, 국내 {kr_score:.1f}점)가 50일/200일선 위에 안정적으로 정배열되어 있으며, VIX({vix:.1f})가 안정권에 머물고 있습니다."
-        market_action_guide = "🔥 [적극 공격 모드] 주도 섹터 1등주에 100% 정상 비중으로 진입하십시오. VCP 피벗 초입 돌파(+0~2.5%) 종목을 최우선 매수하고 거래량 급증 시 피라미딩(불타기)이 유효합니다."
-    elif avg_score >= 1.5 and vix < 26.0:
-        market_status = "🟡 CAUTION (주의/관망 국면)"
-        market_status_desc = f"일부 지수(종합 {avg_score:.2f}점 / 미국 {us_score:.1f}점, 국내 {kr_score:.1f}점)의 20일선 단기 추세가 흔들리거나 VIX({vix:.1f})가 경계선에 도달하여 시장 방향성이 혼조세를 보이고 있습니다."
-        market_action_guide = "⚠️ [선별 방어 모드] 신규 매수 포지션 크기를 평소의 50% 수준으로 축소하십시오. 20일선 거래량이 마른 눌림목 지지 등 최상위 저위험 타점만 선별 접근하고 수익 중인 종목은 분할 익절하십시오."
-    else:
+    # 3. 글로벌 시장 상태 정밀 판정 (가중 점수 기반 — 미국 60%, 한국 40%)
+    # - us_collapse: 미국장 단독 붕괴 시 한국 선방에 무관하게 무조건 🔴 OFF
+    # - weighted_score 기준으로 🟢/🟡/🔴 판정 (단순 평균 avg_score 대체)
+    if us_collapse or weighted_score < 1.5 or vix >= 26.0:
         market_status = "🔴 OFF (하락장 경보 & 특수 기동)"
-        market_status_desc = f"글로벌 지수(종합 {avg_score:.2f}점)가 중장기 이평선(50일/200일선)을 이탈했거나, VIX({vix:.1f})가 공포 구간에 진입하여 시스템 리스크가 가중되었습니다."
+        market_status_desc = f"{'🚨 미국 주요 지수(S&P500/나스닥)가 200일선을 동시 이탈한 붕괴 국면입니다.' if us_collapse else ''}글로벌 가중 지수(미국 60% {us_score:.1f}점 + 한국 40% {kr_score:.1f}점 = 종합 {weighted_score:.2f}점)가 위험 임계치를 하회했거나, VIX({vix:.1f})가 공포 구간에 진입하여 시스템 리스크가 가중되었습니다."
         market_action_guide = "🦅 [미너비니 하락장 특수전 가동] 일반 풀베팅을 금지하고 현금 70~80%를 보존하되, 지수를 이기고 50일선 위에 버티는 '차기 10배 주도주(RS 90+)'에 2~3% 파일럿 정찰병을 투입하고, 우량주 과매도 기술적 반등을 게릴라 타점으로 사냥하십시오."
+    elif weighted_score >= 2.5 and vix < 20.0:
+        market_status = "🟢 ON (강세 상승 국면)"
+        market_status_desc = f"주요 벤치마크 지수(가중 종합 {weighted_score:.2f}점 / 미국 {us_score:.1f}점·60% + 한국 {kr_score:.1f}점·40%)가 50일/200일선 위에 안정적으로 정배열되어 있으며, VIX({vix:.1f})가 안정권에 머물고 있습니다."
+        market_action_guide = "🔥 [적극 공격 모드] 주도 섹터 1등주에 100% 정상 비중으로 진입하십시오. VCP 피벗 초입 돌파(+0~2.5%) 종목을 최우선 매수하고 거래량 급증 시 피라미딩(불타기)이 유효합니다."
+    else:
+        market_status = "🟡 CAUTION (주의/관망 국면)"
+        market_status_desc = f"일부 지수(가중 종합 {weighted_score:.2f}점 / 미국 {us_score:.1f}점·60% + 한국 {kr_score:.1f}점·40%)의 20일선 단기 추세가 흔들리거나 VIX({vix:.1f})가 경계선에 도달하여 시장 방향성이 혼조세를 보이고 있습니다."
+        market_action_guide = "⚠️ [선별 방어 모드] 신규 매수 포지션 크기를 평소의 50% 수준으로 축소하십시오. 20일선 거래량이 마른 눌림목 지지 등 최상위 저위험 타점만 선별 접근하고 수익 중인 종목은 분할 익절하십시오."
 
     indices_summary['meta'] = {
-        'avg_score': avg_score,
+        'avg_score': weighted_score,   # 가중 평균 (미국 60% + 한국 40%) — 단순 평균 대체
+        'raw_avg_score': avg_score,     # 단순 평균 (참고용 보존)
         'us_score': us_score,
         'kr_score': kr_score,
+        'us_collapse': us_collapse,     # 미국 단독 붕괴 플래그
         'vix_info': vix_info,
         'market_status_desc': market_status_desc,
         'market_action_guide': market_action_guide
     }
 
-    return avg_score, market_status, vix, detail_logs, indices_summary
+    return weighted_score, market_status, vix, detail_logs, indices_summary
 
 
 def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series = None) -> dict:
@@ -170,10 +180,19 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         c7 = True
         if bm_close is not None and len(bm_close) >= len(df):
             try:
-                rs_series = (df['Close'] / bm_close.reindex(df.index).ffill()).dropna()
+                bm_aligned = bm_close.reindex(df.index).ffill()
+                rs_series = (df['Close'] / bm_aligned).dropna()
                 rs_curr = rs_series.iloc[-1]
                 rs_6wk_ago = rs_series.iloc[-30] if len(rs_series) >= 30 else rs_curr
-                c7 = bool(rs_curr > rs_6wk_ago)
+                # ★ 개선: RS 방향성 + 절대 아웃퍼폼 직접 비교 (단순 방향성만 보면 오류)
+                # 예: 종목 +10%, S&P500 +15% → RS 하락 중 → 단순 방향성은 잘못 PASS될 수 있음
+                rs_rising = bool(rs_curr > rs_6wk_ago)
+                # 6주(30일) 절대 수익률 직접 비교
+                stock_30d_ret = float(df['Close'].iloc[-1]) / float(df['Close'].iloc[-30]) - 1 if len(df) >= 30 else 0.0
+                bm_30d_ret = float(bm_aligned.iloc[-1]) / float(bm_aligned.iloc[-30]) - 1 if len(bm_aligned) >= 30 else 0.0
+                outperform = bool(stock_30d_ret > bm_30d_ret)
+                # 둘 중 하나라도 충족하면 Pass (너무 엄격하면 종목 과소 필터링)
+                c7 = bool(rs_rising or outperform)
             except Exception:
                 c7 = True
 
@@ -213,9 +232,14 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
         curr_vol = float(volumes[-1])
         vol_ratio = curr_vol / vol_ma20_curr if vol_ma20_curr > 0 else 1.0
 
+        # ★ 피벗 유효성 체크: 최근 10일 고가가 60일 고가의 85% 이상이어야 진짜 피벗 근처
+        # 급등 후 급락 중인 종목의 고가를 피벗으로 오인하는 버그 방어
+        pivot_60d_high = float(np.max(highs[max(0, n - 60):n])) if n >= 20 else curr_price
+        is_valid_pivot_zone = bool(pivot_price >= pivot_60d_high * 0.85)
+
         # 피벗 상방 돌파 (피벗 돌파 직후 +0% ~ +2.5% 이내의 이상적 초입 타점)
         pivot_dist_pct = ((curr_price - pivot_price) / pivot_price) * 100 if pivot_price > 0 else 0.0
-        is_ideal_pivot_entry = bool((0.0 <= pivot_dist_pct <= 2.5) and (vol_ratio >= 1.20))
+        is_ideal_pivot_entry = bool(is_valid_pivot_zone and (0.0 <= pivot_dist_pct <= 2.5) and (vol_ratio >= 1.20))
         is_over_chased = bool(pivot_dist_pct > 3.0)  # +3% 이상 이미 뜬 상투는 추격 매수 차단
 
         # 4) 20일선 거래량 마른 눌림목 지지 타점 (First Pullback to 20MA)
@@ -251,6 +275,7 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
             '티커': ticker,
             '현재가': curr_price,
             '피벗거리(%)': round(float(disp_20), 2) if not pd.isna(disp_20) else 0.0,
+            '피벗기준가': round(float(pivot_price), 2),
             '피벗돌파율(%)': round(float(pivot_dist_pct), 2),
             '승률': round(float(win_rate), 3),
             '손익비': round(float(payoff_ratio), 2),
@@ -283,7 +308,7 @@ def evaluate_trend_and_sepa(ticker: str, df: pd.DataFrame, bm_close: pd.Series =
 def get_fallback_data(ticker: str) -> dict:
     price = 73000.0 if ticker == "005930" else (172000.0 if ticker == "000660" else 150.0)
     return {
-        '티커': ticker, '현재가': price, '피벗거리(%)': -2.1, '피벗돌파율(%)': 0.0, '승률': 0.45, '손익비': 1.1,
+        '티커': ticker, '현재가': price, '피벗거리(%)': -2.1, '피벗기준가': round(float(price * 1.02), 2), '피벗돌파율(%)': 0.0, '승률': 0.45, '손익비': 1.1,
         '켈리비중': 0.04, 'ATR': price * 0.025, '거래량배수': 1.0, 'VCP수축': False,
         '거래량고갈': False, '피벗초입돌파': False, '눌림목지지': False, '단기과열여부': False, 'VCP패턴': False,
         'MA20': price * 1.03, 'MA50': price * 1.04, 'MA150': price * 1.05, 'MA200': price * 1.06,
@@ -341,8 +366,19 @@ def calculate_portfolio_allocation(
     if df.empty:
         df = pipeline_df.copy()
 
-    # 하락장(🔴)에서도 미너비니 특수 정찰병(Pilot Buys, 2~3%) 허용
-    market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.5)
+    # ★ 단계별 미너비니 고정 비중 체계 도입 (켈리는 보조 참고용으로만 활용)
+    # 미너비니 원전: 초입 5% → 확인 후 추가 5% 피라미딩, 하락장 정찰 2~3%
+    # 켈리 공식은 일간 수익률 기반으로 50~55% 승률에서 무의미한 값 산출 → 최종비중 계산 제외
+    base_stage_weights = {
+        'pivot_entry':  0.05,   # 피벗 초입 돌파: 5% (최우선 타점)
+        'pullback':     0.04,   # 20일선 눌림목: 4% (저위험 2순위)
+        'vcp_ready':    0.03,   # VCP 수축 완료 (돌파 대기): 3%
+        'momentum':     0.03,   # 거래량 동반 추가 매수: 3%
+        'hold':         0.02,   # 보유/관망: 2% (신규 진입 비추천)
+        'bear_pilot':   0.025,  # 하락장 정찰병: 2.5%
+    }
+    # 시장 국면별 멀티플라이어 (미너비니: ON=100%, CAUTION=50%, OFF=파일럿만)
+    market_multiplier = 1.0 if "🟢" in market_status else 0.5
     df['켈리비중'] = df['켈리비중'].fillna(0.04)
     df['최종비중'] = df['켈리비중'] * market_multiplier
     # 하락장에서는 개별 종목 비중을 2.0%~3.0%로 정찰 캡핑하여 리스크를 0.1% 미만으로 통제
@@ -351,6 +387,7 @@ def calculate_portfolio_allocation(
 
     portfolio_status = []
     sort_priority = []
+    assigned_weights = []
 
     for _, row in df.iterrows():
         curr = float(row['현재가']) if pd.notna(row['현재가']) else 100.0
@@ -371,64 +408,85 @@ def calculate_portfolio_allocation(
                 stage = "🦅 차기 10배 주도주"
                 strategy = "🦅 [미너비니 특수전] 차기 10배 주도주 후보 (2~3% 파일럿 정찰 매수 | 손절 -3% 엄수)"
                 priority = 1
+                assigned_w = 0.025
             elif ("A" in grade or "B+" in grade) and curr >= ma60:
                 stage = "💎 퀄리티 방어"
                 strategy = "🛡️ [우량주 방어선] 펀더멘털 A급 눌림목 지지 (소액 분할 매수 | 손절 -5%)"
                 priority = 2
+                assigned_w = 0.020
             elif is_vcp_ready:
                 stage = "⏳ VCP 수축 대기"
                 strategy = "⏳ [바닥 확인 대기] VCP 변동성 수축 중 (시장 반등일 돌파 대기)"
                 priority = 3
+                assigned_w = 0.015
             elif curr >= ma20:
                 stage = "2단계 (안정)"
                 strategy = "📈 [상대적 강세] 지수 대비 선방 중 (관망 유지 & 정찰 후보)"
                 priority = 4
+                assigned_w = 0.015
             else:
                 stage = "시장 관망"
                 strategy = "🛑 하락장 관망 (현금 보존 & 추세 이탈 종목 매수 금지)"
                 priority = 90
+                assigned_w = 0.000
 
         # 2. 역배열 하락세
         elif curr < ma20 and ma20 < ma60:
             stage, strategy, priority = "5단계 (하락)", "❌ 매수 금지 (하방 이탈)", 99
+            assigned_w = 0.000
 
-        # 3. 단기 과열 (추격 매수 차단: 이미 +3% 이상 뜸)
-        elif is_over_chased or disp_20 > 5.5:
+        # 3. 단기 과열 (추격 매수 차단: 피벗 돌파율 +3% 이상만 기준)
+        # ★ 개선: disp_20 > 5.5 조건 제거 — 미너비니는 피벗 돌파율로만 과열 판정
+        # (20일선 이격 5.5%는 추세 추종 중 정상 범위일 수 있음)
+        elif is_over_chased:
             stage, strategy, priority = "2단계 (과열)", "🚨 단기 과열 (추격 매수 금지 - 고점 덫)", 8
+            assigned_w = 0.000
 
         # 4. 트렌드 템플릿 PASS 종목의 정밀 실전 타점
         elif is_template_pass:
             if is_pivot_entry:
                 stage, strategy, priority = "3단계 (가속)", "🔥 VCP 피벗 초입 돌파 (최우선 매수)", 1
+                assigned_w = base_stage_weights['pivot_entry'] * market_multiplier
             elif is_pullback:
                 stage, strategy, priority = "2단계 (수축)", "💎 20일선 거래량 마른 눌림목 (저위험 매수)", 2
+                assigned_w = base_stage_weights['pullback'] * market_multiplier
             elif is_vcp_ready and 0.0 <= disp_20 <= 3.0:
                 stage, strategy, priority = "2단계 (수축)", "⏳ VCP 수축 완료 (돌파 임박 대기)", 3
+                assigned_w = base_stage_weights['vcp_ready'] * market_multiplier
             elif vol_ratio >= 1.3 and 0.0 <= disp_20 <= 3.5:
                 stage, strategy, priority = "3단계 (가속)", "🔥 불타기 (거래량 동반 추가 매수)", 4
+                assigned_w = base_stage_weights['momentum'] * market_multiplier
             elif 0.0 <= disp_20 <= 4.0:
                 stage, strategy, priority = "2단계 (안정)", "📈 강력 보유 (추세 안정)", 5
+                assigned_w = base_stage_weights['hold'] * market_multiplier
             else:
                 stage, strategy, priority = "3단계 (가속)", "⚠️ 보유 (거래량 부족 추가 유보)", 6
+                assigned_w = 0.020 * market_multiplier
 
         # 5. 트렌드 템플릿 미달 종목
         elif curr >= ma20 and ma20 >= ma60:
             if 0.0 <= disp_20 <= 3.0:
                 stage, strategy, priority = "관망", "⚠️ 트렌드 템플릿 조건 미달 (관망)", 7
+                assigned_w = 0.000
             else:
                 stage, strategy, priority = "관망", "⚠️ 관망", 8
+                assigned_w = 0.000
 
         elif curr < ma20 and ma20 >= ma60:
             stage, strategy, priority = "4단계 (이탈)", "💰 익절 확정 혹은 리스크 축소 분할매도", 9
+            assigned_w = 0.000
         else:
             stage, strategy, priority = "분석 대기", "관망", 10
+            assigned_w = 0.000
 
         portfolio_status.append({'현재_단계': stage, '전략제언': strategy})
         sort_priority.append(priority)
+        assigned_weights.append(assigned_w)
 
     status_df = pd.DataFrame(portfolio_status)
     df = pd.concat([df.reset_index(drop=True), status_df], axis=1)
     df['우선순위'] = sort_priority
+    df['최종비중'] = assigned_weights
 
     # 정렬: 우선순위(1~99) ➔ 템플릿 통과 여부(PASS 우선) ➔ 피벗거리(오름차순)
     df['템플릿_통과'] = df['트렌드_템플릿'].apply(lambda x: 0 if "✅" in str(x) else 1)

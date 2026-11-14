@@ -906,14 +906,14 @@ with tab_allocator:
         st.info("💡 종목의 자산군 분류가 마음에 들지 않으실 경우(예: 'NVDA'를 테마에서 스윙으로 변경 등), 아래에서 변경하시면 포트폴리오 분석 및 자산 배분 비중에 즉각 영구 반영됩니다.")
         
         all_holdings_list = []
-        for acc_name, acc_info in my_analysis['accounts_data'].items():
-            for h in acc_info['holdings']:
+        for acc_name, acc_info in my_analysis['accounts'].items():
+            for h in acc_info.get('holdings', []):
                 all_holdings_list.append({
-                    "display": f"[{acc_name}] {h['종목명']} ({h['티커']}) - 현재: {h.get('자산군', '기타')}",
+                    "display": f"[{acc_name}] {h['종목명']} ({h['티커']}) - 현재: {h.get('자산분류', '기타')}",
                     "계좌명": acc_name,
                     "티커": h['티커'],
                     "종목명": h['종목명'],
-                    "현재자산군": h.get('자산군', '🌱 글로벌 코어 지수')
+                    "현재자산군": h.get('자산분류', '🌱 글로벌 코어 지수')
                 })
         
         if all_holdings_list:
@@ -959,12 +959,17 @@ with tab_allocator:
     cross_data = get_cross_lens_matrix(my_analysis)
     matrix_df = cross_data['matrix_df']
 
-    # 매트릭스 테이블 출력 (Pandas 1.x & 2.x 완전 호환)
-    format_cell = lambda x: f"{int(x):,}원" if (isinstance(x, (int, float)) and x > 0) else ("-" if isinstance(x, (int, float)) else str(x))
-    if hasattr(matrix_df, 'map'):
-        disp_matrix = matrix_df.map(format_cell)
-    else:
-        disp_matrix = matrix_df.applymap(format_cell)
+    # 매트릭스 테이블 출력 (Pandas 1.x & 2.x 완전 호환 — applymap 완전 제거)
+    def _fmt_cell(x):
+        if isinstance(x, (int, float)):
+            return f"{int(x):,}원" if x > 0 else "-"
+        return str(x)
+    try:
+        # Pandas 2.1+ : DataFrame.map(func) 로 element-wise 적용
+        disp_matrix = matrix_df.map(_fmt_cell)
+    except TypeError:
+        # Pandas 2.0 이하 fallback
+        disp_matrix = matrix_df.applymap(_fmt_cell)
     st.dataframe(disp_matrix, use_container_width=True)
 
     # [항목 6] 세제 진단 엔진 연동
