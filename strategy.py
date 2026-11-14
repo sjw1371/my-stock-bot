@@ -110,9 +110,9 @@ def evaluate_macro(macro_data: dict) -> tuple:
         market_status_desc = f"일부 지수(종합 {avg_score:.2f}점 / 미국 {us_score:.1f}점, 국내 {kr_score:.1f}점)의 20일선 단기 추세가 흔들리거나 VIX({vix:.1f})가 경계선에 도달하여 시장 방향성이 혼조세를 보이고 있습니다."
         market_action_guide = "⚠️ [선별 방어 모드] 신규 매수 포지션 크기를 평소의 50% 수준으로 축소하십시오. 20일선 거래량이 마른 눌림목 지지 등 최상위 저위험 타점만 선별 접근하고 수익 중인 종목은 분할 익절하십시오."
     else:
-        market_status = "🔴 OFF (하락장 셧다운)"
-        market_status_desc = f"글로벌 지수(종합 {avg_score:.2f}점)가 중장기 이평선(50일/200일선)을 하향 이탈했거나, VIX({vix:.1f})가 공포 구간에 진입하여 시스템 리스크가 가중되었습니다."
-        market_action_guide = "🚨 [비상 셧다운 모드] 마크 미너비니 원칙에 따라 신규 매수를 전면 중단(Hard Stop)하십시오. 보유 종목은 -7% 안전 버퍼 손절선을 칼같이 엄수하고 100% 현금을 보존하십시오."
+        market_status = "🔴 OFF (하락장 경보 & 특수 기동)"
+        market_status_desc = f"글로벌 지수(종합 {avg_score:.2f}점)가 중장기 이평선(50일/200일선)을 이탈했거나, VIX({vix:.1f})가 공포 구간에 진입하여 시스템 리스크가 가중되었습니다."
+        market_action_guide = "🦅 [미너비니 하락장 특수전 가동] 일반 풀베팅을 금지하고 현금 70~80%를 보존하되, 지수를 이기고 50일선 위에 버티는 '차기 10배 주도주(RS 90+)'에 2~3% 파일럿 정찰병을 투입하고, 우량주 과매도 기술적 반등을 게릴라 타점으로 사냥하십시오."
 
     indices_summary['meta'] = {
         'avg_score': avg_score,
@@ -341,9 +341,13 @@ def calculate_portfolio_allocation(
     if df.empty:
         df = pipeline_df.copy()
 
-    market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.0)
+    # 하락장(🔴)에서도 미너비니 특수 정찰병(Pilot Buys, 2~3%) 허용
+    market_multiplier = 1.0 if "🟢" in market_status else (0.5 if "🟡" in market_status else 0.5)
     df['켈리비중'] = df['켈리비중'].fillna(0.04)
     df['최종비중'] = df['켈리비중'] * market_multiplier
+    # 하락장에서는 개별 종목 비중을 2.0%~3.0%로 정찰 캡핑하여 리스크를 0.1% 미만으로 통제
+    if is_market_shutdown:
+        df['최종비중'] = df['최종비중'].clip(lower=0.02, upper=0.03)
 
     portfolio_status = []
     sort_priority = []
@@ -359,10 +363,30 @@ def calculate_portfolio_allocation(
         is_pullback = bool(row.get('눌림목지지', False))
         is_over_chased = bool(row.get('단기과열여부', False))
         is_vcp_ready = bool(row.get('VCP수축', False) and row.get('거래량고갈', False))
+        grade = str(row.get('등급', ''))
 
-        # 1. 시장 하락장 셧다운 시
+        # 1. 시장 하락장(🔴 OFF) 시 마크 미너비니 특수 기동대 분기
         if is_market_shutdown:
-            stage, strategy, priority = "시장 관망", "🛑 하락장 매수 셧다운 (현금 100% 대기)", 90
+            if is_template_pass and (is_pivot_entry or is_pullback or curr >= ma20):
+                stage = "🦅 차기 10배 주도주"
+                strategy = "🦅 [미너비니 특수전] 차기 10배 주도주 후보 (2~3% 파일럿 정찰 매수 | 손절 -3% 엄수)"
+                priority = 1
+            elif ("A" in grade or "B+" in grade) and curr >= ma60:
+                stage = "💎 퀄리티 방어"
+                strategy = "🛡️ [우량주 방어선] 펀더멘털 A급 눌림목 지지 (소액 분할 매수 | 손절 -5%)"
+                priority = 2
+            elif is_vcp_ready:
+                stage = "⏳ VCP 수축 대기"
+                strategy = "⏳ [바닥 확인 대기] VCP 변동성 수축 중 (시장 반등일 돌파 대기)"
+                priority = 3
+            elif curr >= ma20:
+                stage = "2단계 (안정)"
+                strategy = "📈 [상대적 강세] 지수 대비 선방 중 (관망 유지 & 정찰 후보)"
+                priority = 4
+            else:
+                stage = "시장 관망"
+                strategy = "🛑 하락장 관망 (현금 보존 & 추세 이탈 종목 매수 금지)"
+                priority = 90
 
         # 2. 역배열 하락세
         elif curr < ma20 and ma20 < ma60:

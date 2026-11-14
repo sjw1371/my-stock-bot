@@ -58,7 +58,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 131080,
+      "cash_krw": 41124,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -185,7 +185,7 @@
           "ticker": "IRP",
           "name": "IRP",
           "shares": 1.0,
-          "avg_price": 3038162,
+          "avg_price": 2969817,
           "dividend_yield": 0.0,
           "target_weight": 0.05
         }
@@ -295,6 +295,12 @@
       "equity": 37457743.0,
       "cost": 37500000.0,
       "return_pct": -0.11
+    },
+    {
+      "date": "2026-11-14",
+      "equity": 38275087.0,
+      "cost": 37500000.0,
+      "return_pct": 2.07
     }
   ]
 }

@@ -308,50 +308,93 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             acc_cost_stock_krw += cost_val_krw
 
             # ------------------------------------------------------------------
-            # 🩺 Dual-Track AI 종목 진단 로직
+            # 🩺 Dual-Track AI 종목 진단 로직 (초강력 실전 실행형)
             # ------------------------------------------------------------------
             tech = tech_map.get(tk, {})
             above_20 = tech.get('above_ma20', True)
             above_50 = tech.get('above_ma50', True)
             above_200 = tech.get('above_ma200', True)
 
+            # 구체적 실전 실행 단가 산출
+            is_usd = (acc_type == "단기퀀트스윙" and "해외" in acc_name) or is_usd_account
+            curr_price_str = f"${live_p:.2f}" if is_usd else f"{int(live_p):,}원"
+            stop_price = round(avg_p * 0.93, 2) if is_usd else int(avg_p * 0.93)
+            stop_price_str = f"${stop_price:.2f}" if is_usd else f"{stop_price:,}원"
+            breakeven_str = f"${avg_p:.2f}" if is_usd else f"{int(avg_p):,}원"
+            target_p1 = round(avg_p * 1.15, 2) if is_usd else int(avg_p * 1.15)
+            target_p1_str = f"${target_p1:.2f}" if is_usd else f"{target_p1:,}원"
+            target_p2 = round(avg_p * 1.25, 2) if is_usd else int(avg_p * 1.25)
+            target_p2_str = f"${target_p2:.2f}" if is_usd else f"{target_p2:,}원"
+
             action_badge = "홀딩"
             action_desc = ""
             action_color = "green"
+            action_trigger_price = stop_price_str
 
             if acc_type == "장기적립":
-                # 장기 적립식 룰 (손절 절대 금지, 200일선 우상향 적립)
+                # 장기 적립식 룰 (손절 절대 금지, 200일선 우상향 적립 & DRIP)
+                action_trigger_price = target_p1_str
                 if above_200:
-                    action_badge = "🟢 지속 적립 (코어 우상향)"
-                    action_desc = "200일선 위 장기 우상향 추세 완벽. 하락 시에도 적립식 매수 유지."
+                    action_badge = "🟢 [코어 적립 유지]"
+                    action_desc = (
+                        f"200일선 위 우상향 완벽. 연 예상 배당 약 {int(annual_div_krw):,}원 발생 ➔ "
+                        f"배당금 전액 이 종목 재투자(DRIP) 가동 추천."
+                    )
                     action_color = "green"
                 else:
-                    action_badge = "🟡 저가 분할매수 기회"
-                    action_desc = "단기 조정 구간. 장기 코어 자산이므로 손절하지 않고 비중 유지."
+                    action_badge = "🛒 [저가 눌림목 추매]"
+                    action_desc = (
+                        f"200일선 아래 일시적 저평가 기회. 손절 절대 금지! "
+                        f"현재가({curr_price_str}) 부근에서 3회 분할 매수로 평단가 인하 권고."
+                    )
                     action_color = "orange"
 
             else:
                 # 단기 퀀트 스윙 룰 (마크 미너비니 SEPA & -7% 칼손절)
                 if return_pct <= -7.0:
-                    action_badge = "🚨 손절 권고 (-7% 도달)"
-                    action_desc = f"진입가 대비 {return_pct:.1f}% 하락. 미너비니 원칙에 따라 리스크 차단 손절 권고."
+                    action_badge = "🚨 [즉시 칼손절 실행]"
+                    action_desc = (
+                        f"미너비니 -7% 손절선({stop_price_str}) 터치({return_pct:.1f}%)! "
+                        f"{int(shares)}주 전량 시장가 매도하여 약 {int(eval_val_krw):,}원 현금 확보."
+                    )
                     action_color = "red"
+                    action_trigger_price = stop_price_str
                 elif not above_50 and return_pct < 0:
-                    action_badge = "⚠️ 리스크 축소 (50일선 이탈)"
-                    action_desc = "중기 추세선(50일선) 하향 이탈. 반등 시 비중 축소 권고."
+                    action_badge = "⚠️ [반등 시 50% 축소]"
+                    sell_qty = max(1, int(round(shares * 0.5)))
+                    action_desc = (
+                        f"50일선 이탈 경고({return_pct:.1f}%). 20일선 부근 반등 시 "
+                        f"{sell_qty}주(50%) 분할 매도하여 리스크 선제 차단."
+                    )
                     action_color = "orange"
-                elif above_20 and return_pct >= 10.0:
-                    action_badge = "💰 트레일링 익절 대기"
-                    action_desc = f"+{return_pct:.1f}% 수익 중. 20일선 지지 시 끝까지 홀딩."
+                    action_trigger_price = breakeven_str
+                elif return_pct >= 20.0:
+                    action_badge = "💰 [1/3 분할 익절]"
+                    tp_qty = max(1, int(shares // 3))
+                    action_desc = (
+                        f"+{return_pct:.1f}% 대박 수익 도달! {tp_qty}주 분할 매도하여 수익 실현, "
+                        f"잔여 물량은 스탑가를 본전({breakeven_str})에 걸고 2차 목표가({target_p2_str})까지 끝까지 추세 추종."
+                    )
                     action_color = "blue"
+                    action_trigger_price = target_p2_str
+                elif above_20 and return_pct >= 10.0:
+                    action_badge = "🛡️ [본전 스탑 상향]"
+                    action_desc = (
+                        f"+{return_pct:.1f}% 안정 수익권. 스탑로스를 매수가({breakeven_str})로 상향 지정하여 "
+                        f"원금 100% 무손실 트레이드로 잠금."
+                    )
+                    action_color = "blue"
+                    action_trigger_price = breakeven_str
                 elif above_20:
-                    action_badge = "📈 강력 보유 (추세 안정)"
-                    action_desc = "20일선 위 안정적 상승 추세 유지 중."
+                    action_badge = "📈 [추세 홀딩 (20선 위)]"
+                    action_desc = f"20일선 위 상승 정배열 유지 중. 1차 목표가 {target_p1_str}까지 홀딩."
                     action_color = "green"
+                    action_trigger_price = target_p1_str
                 else:
-                    action_badge = "⏳ 관망 (20일선 지지 체크)"
-                    action_desc = "단기 눌림목 구간. 20일선 지지 여부 관망."
+                    action_badge = "⏳ [지지선 관망]"
+                    action_desc = f"단기 눌림목 구간. 손절선({stop_price_str}) 이탈 전까지 홀딩 관망."
                     action_color = "gray"
+                    action_trigger_price = stop_price_str
 
             h_row = {
                 '계좌': acc_name,
@@ -370,10 +413,14 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
                 '연간예상배당(원)': annual_div_krw,
                 '월환산배당(원)': monthly_div_krw,
                 '목표비중': target_w,
+                '손절기준가': stop_price_str,
+                '본전스탑가': breakeven_str,
+                '1차목표가': target_p1_str,
+                '실행단가': action_trigger_price,
                 '진단상태': action_badge,
                 '처방내용': action_desc,
                 '진단색상': action_color,
-                '통화': "USD" if is_usd_account else "KRW"
+                '통화': "USD" if is_usd else "KRW"
             }
             holding_details.append(h_row)
             all_holding_rows.append(h_row)
@@ -521,7 +568,7 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             "action_advice": action_advice
         })
 
-    # 5. 내 잔고 기반 맞춤형 주문표 (Rebalancing & Action Suggestions) 산출
+    # 5. 내 잔고 기반 맞춤형 주문표 & 미래 구간 예측 (Future Wealth Projection Orders)
     for acc_name, acc_eval in evaluated_accounts.items():
         acc_type = acc_eval['type']
         acc_total_val = acc_eval['total_eval_krw']
@@ -534,11 +581,20 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
                 target_w = h['목표비중']
                 diff_w = target_w - curr_w
 
-                if diff_w > 0.03 and acc_cash >= 50000:
-                    needed_krw = min(acc_cash * 0.5, acc_total_val * diff_w)
+                if diff_w > 0.02 and acc_cash >= 30000:
+                    needed_krw = min(acc_cash * 0.6, acc_total_val * diff_w)
                     price_krw = h['현재가']
                     buy_qty = int(needed_krw // price_krw) if price_krw > 0 else 0
                     if buy_qty > 0:
+                        order_krw = buy_qty * price_krw
+                        post_eval = curr_val + order_krw
+                        post_w = (post_eval / acc_total_val * 100.0) if acc_total_val > 0 else 0.0
+                        
+                        # 미래 구간 1년 배당 증가분 및 3년 복리 가치 예측
+                        div_y = h.get('배당수익률(%)', 0.0)
+                        add_ann_div = int(order_krw * (div_y / 100.0))
+                        fut_3y_val = int(order_krw * ((1.0 + 0.09) ** 3)) # 연 9% 복리 가정
+
                         order_suggestions.append({
                             '계좌': acc_name,
                             '구분': '🌱 장기 정기 적립',
@@ -546,22 +602,49 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
                             '티커': h['티커'],
                             '현재가': f"{int(price_krw):,}원",
                             '추천주문': f"{buy_qty}주 추가 매수",
-                            '주문금액': f"{int(buy_qty * price_krw):,}원",
-                            '이유': f"목표 비중({target_w*100:.0f}%) 대비 부족({curr_w*100:.1f}%)"
+                            '주문금액': f"{int(order_krw):,}원",
+                            '이유': f"목표 비중({target_w*100:.0f}%) 대비 {abs(diff_w)*100:.1f}% 결핍",
+                            '비중수렴예측': f"{curr_w*100:.1f}% ➔ {post_w:.1f}% (목표 {target_w*100:.0f}%)",
+                            '1년후추가배당': f"+연 {add_ann_div:,}원 (월 +{int(add_ann_div/12):,}원)" if add_ann_div > 0 else "-",
+                            '3년후복리예측': f"약 {fut_3y_val:,}원 (+{(fut_3y_val - order_krw):,}원 성장)"
                         })
 
         elif acc_type == "단기퀀트스윙":
             for h in acc_eval['holdings']:
-                if h['수익률(%)'] <= -7.0:
+                ret_p = h['수익률(%)']
+                cur_price = h['현재가']
+                shares = h['수량']
+                eval_krw = h['평가금액(원)']
+
+                if ret_p <= -7.0:
                     order_suggestions.append({
                         '계좌': acc_name,
                         '구분': '🚨 리스크 손절 청산',
                         '종목명': h['종목명'],
                         '티커': h['티커'],
-                        '현재가': f"${h['현재가']:.2f}",
-                        '추천주문': f"{int(h['수량'])}주 전량 매도 (손절)",
-                        '주문금액': f"약 {int(h['평가금액(원)']):,}원 회수",
-                        '이유': f"손절 기준(-7%) 도달 ({h['수익률(%)']:.1f}%) ➔ 현금 확보"
+                        '현재가': f"${cur_price:.2f}" if "해외" in acc_name else f"{int(cur_price):,}원",
+                        '추천주문': f"{int(shares)}주 전량 매도 (손절)",
+                        '주문금액': f"약 {int(eval_krw):,}원 회수",
+                        '이유': f"손절 기준(-7%) 도달 ({ret_p:.1f}%) ➔ 추가 손실 차단",
+                        '비중수렴예측': f"스윙 리스크 0% 제거 ➔ 안전 현금 {int(eval_krw):,}원 전환",
+                        '1년후추가배당': "-",
+                        '3년후복리예측': f"원금 회수로 차기 VCP 대장주(손익비 1:3) 진입 시드 확보"
+                    })
+                elif ret_p >= 15.0:
+                    tp_qty = max(1, int(shares // 3))
+                    tp_val = tp_qty * cur_price * (exchange_rate if "해외" in acc_name else 1.0)
+                    order_suggestions.append({
+                        '계좌': acc_name,
+                        '구분': '💰 분할 익절 & 본전스탑',
+                        '종목명': h['종목명'],
+                        '티커': h['티커'],
+                        '현재가': f"${cur_price:.2f}" if "해외" in acc_name else f"{int(cur_price):,}원",
+                        '추천주문': f"{tp_qty}주 1/3 분할 익절",
+                        '주문금액': f"약 {int(tp_val):,}원 실현",
+                        '이유': f"+{ret_p:.1f}% 수익권 도달! 1/3 수익 확정 및 잔여 물량 본전스탑",
+                        '비중수렴예측': f"현금 {int(tp_val):,}원 확정 + 나머지 무위험 추세 추종",
+                        '1년후추가배당': "-",
+                        '3년후복리예측': f"확정 수익 복리 재투자로 계좌 승률 극대화"
                     })
 
     total_pnl_krw = total_net_worth - total_cost_basis
@@ -888,4 +971,251 @@ def add_daily_asset_snapshot(custom_date: str = "", custom_cost: float = 0.0) ->
     portfolio_data["asset_history"] = history
     save_portfolio_data(portfolio_data)
     return portfolio_data
+
+
+def get_holding_factor_map(analysis: dict) -> dict:
+    """
+    6대 자산 팩터별로 실제 보유 중인 종목들을 상세 매핑하여 반환 (5번 요구사항 해결)
+    """
+    all_h = analysis.get('all_holdings_df', pd.DataFrame())
+    total_net = analysis.get('total_net_worth', 1.0)
+    
+    categories = [
+        "🌱 글로벌 코어 지수",
+        "💰 고배당 & 인컴",
+        "🤖 테마 & 미래혁신",
+        "🚀 퀀트 스윙 & 모멘텀",
+        "🪙 대체자산 (코인)",
+        "💵 안전 현금"
+    ]
+    
+    factor_map = {c: {"holdings": [], "total_eval_krw": 0.0, "weight_pct": 0.0, "annual_div_krw": 0.0} for c in categories}
+    
+    # 주식 종목 매핑
+    if not all_h.empty:
+        for _, r in all_h.iterrows():
+            cat = r.get('자산분류', "🚀 퀀트 스윙 & 모멘텀")
+            if cat not in factor_map:
+                cat = "🚀 퀀트 스윙 & 모멘텀"
+            
+            eval_krw = float(r.get('평가금액(원)', 0.0))
+            div_krw = float(r.get('연간예상배당(원)', 0.0))
+            
+            h_item = {
+                "계좌": r.get('계좌'),
+                "계좌명": r.get('계좌'),
+                "종목명": r.get('종목명'),
+                "티커": r.get('티커'),
+                "수량": r.get('수량'),
+                "매수단가": r.get('매수단가'),
+                "현재가": r.get('현재가'),
+                "수익률(%)": r.get('수익률(%)', 0.0),
+                "평가금액(원)": eval_krw,
+                "평가금액": eval_krw,
+                "비중": (eval_krw / total_net * 100.0) if total_net > 0 else 0.0,
+                "배당률(%)": r.get('배당수익률(%)', 0.0),
+                "연간배당(원)": div_krw,
+                "예상연배당": div_krw,
+                "진단상태": r.get('진단상태')
+            }
+            factor_map[cat]["holdings"].append(h_item)
+            factor_map[cat]["total_eval_krw"] += eval_krw
+            factor_map[cat]["annual_div_krw"] += div_krw
+
+    # 현금 매핑 (각 계좌별 예수금)
+    total_cash = analysis.get('total_cash_krw', 0.0)
+    factor_map["💵 안전 현금"]["total_eval_krw"] = total_cash
+    for acc_name, acc_info in analysis.get('accounts', {}).items():
+        c_krw = acc_info.get('total_cash_krw', 0.0)
+        if c_krw > 0:
+            factor_map["💵 안전 현금"]["holdings"].append({
+                "계좌": acc_name,
+                "계좌명": acc_name,
+                "종목명": f"{acc_name} 예수금",
+                "티커": "CASH",
+                "수량": 1,
+                "매수단가": c_krw,
+                "현재가": c_krw,
+                "수익률(%)": 0.0,
+                "평가금액(원)": c_krw,
+                "평가금액": c_krw,
+                "비중": (c_krw / total_net * 100.0) if total_net > 0 else 0.0,
+                "배당률(%)": 0.0,
+                "연간배당(원)": 0.0,
+                "예상연배당": 0.0,
+                "진단상태": "안전 버퍼"
+            })
+
+    for c in categories:
+        w_pct = (factor_map[c]["total_eval_krw"] / total_net * 100.0) if total_net > 0 else 0.0
+        factor_map[c]["weight_pct"] = w_pct
+        factor_map[c]["weight"] = w_pct
+        factor_map[c]["total_eval"] = factor_map[c]["total_eval_krw"]
+        factor_map[c]["count"] = len(factor_map[c]["holdings"])
+
+    return factor_map
+
+
+def update_holding_asset_category(account_name: str, ticker: str, new_category: str) -> bool:
+    """
+    특정 계좌의 특정 종목에 대한 자산분류(팩터)를 변경하고 my_portfolio.json에 영구 저장
+    """
+    portfolio_data = load_portfolio_data()
+    accs = portfolio_data.get("accounts", {})
+    if account_name in accs:
+        for h in accs[account_name].get("holdings", []):
+            if h.get("ticker") == ticker:
+                h["asset_category"] = new_category
+                save_portfolio_data(portfolio_data)
+                return True
+    return False
+
+
+def get_tax_leakage_diagnosis(analysis: dict) -> dict:
+    """
+    일반 과세 계좌의 세금 누수(배당소득세 15.4%, 양도소득세 22%)와
+    절세계좌(연금/ISA) 활용 시 10년 복리 절세 이득액을 정밀 산출 (Step 3 구체화)
+    """
+    all_h = analysis.get('all_holdings_df', pd.DataFrame())
+    exchange_rate = analysis.get('exchange_rate', 1430.0)
+    
+    taxable_eval = 0.0
+    taxable_div_krw = 0.0
+    taxable_div_holdings = []
+    overseas_gain_krw = 0.0
+
+    if not all_h.empty:
+        for _, r in all_h.iterrows():
+            acc = str(r.get('계좌', ''))
+            eval_krw = float(r.get('평가금액(원)', 0.0))
+            div_krw = float(r.get('연간예상배당(원)', 0.0))
+            pnl_krw = float(r.get('평가손익(원)', 0.0))
+
+            if "일반" in acc:
+                taxable_eval += eval_krw
+                if div_krw > 0:
+                    taxable_div_krw += div_krw
+                    taxable_div_holdings.append({
+                        "계좌": acc,
+                        "종목명": r.get('종목명'),
+                        "연간배당금": div_krw,
+                        "예상배당세(15.4%)": int(div_krw * 0.154)
+                    })
+                if "해외" in acc and pnl_krw > 0:
+                    overseas_gain_krw += pnl_krw
+
+    annual_tax_loss = int(taxable_div_krw * 0.154)
+    # 10년 복리(연 8% 수익 가정) 과세이연 누적 혜택
+    compound_10y_tax_benefit = int(annual_tax_loss * (((1 + 0.08) ** 10 - 1) / 0.08)) if annual_tax_loss > 0 else 0
+    
+    # 250만원 해외주식 양도세 공제 한도 진단
+    capital_gain_deduction_used = min(2500000, max(0, int(overseas_gain_krw)))
+    capital_gain_deduction_remain = max(0, 2500000 - int(overseas_gain_krw))
+
+    return {
+        "taxable_eval": taxable_eval,
+        "taxable_div_krw": taxable_div_krw,
+        "annual_tax_loss": annual_tax_loss,
+        "annual_dividend_tax_leakage": annual_tax_loss,
+        "compound_10y_tax_benefit": compound_10y_tax_benefit,
+        "ten_year_compounded_leakage": compound_10y_tax_benefit,
+        "taxable_div_holdings": taxable_div_holdings,
+        "overseas_gain_krw": int(overseas_gain_krw),
+        "capital_gain_tax_free_limit": 2500000,
+        "capital_gain_deduction_remain": capital_gain_deduction_remain
+    }
+
+
+def generate_quant_pb_audit_report(sim_cat_weights: dict, total_equity: float, analysis: dict, macro_summary: dict = None) -> dict:
+    """
+    [자산 배분 Step 7 전문성 대폭 강화]
+    월가 수석 PB & 마크 미너비니 투자심의위원회(Investment Committee) 정밀 심의 보고서 데이터 생성
+    """
+    quant_metrics = calculate_portfolio_quant_metrics(sim_cat_weights, total_equity)
+    tax_diag = get_tax_leakage_diagnosis(analysis)
+    
+    vix_val = 20.5
+    market_score = 2.1
+    if macro_summary:
+        meta = macro_summary.get('meta', {})
+        vix_val = meta.get('vix_info', {}).get('value', 20.5)
+        market_score = macro_summary.get('avg_score', 2.1)
+
+    # 1. 거시 국면 적합성 점수 (Macro Alignment Score, 100점 만점)
+    cash_w = sim_cat_weights.get("💵 안전 현금", 0) / 100.0
+    div_w = sim_cat_weights.get("💰 고배당 & 인컴", 0) / 100.0
+    growth_w = (sim_cat_weights.get("🌱 글로벌 코어 지수", 0) + sim_cat_weights.get("🤖 테마 & 미래혁신", 0) + sim_cat_weights.get("🚀 퀀트 스윙 & 모멘텀", 0)) / 100.0
+
+    macro_fit_score = 75
+    if vix_val >= 25.0:
+        if cash_w + div_w >= 0.45:
+            macro_fit_score += 20
+        else:
+            macro_fit_score -= 15
+    else:
+        if 0.05 <= cash_w <= 0.15 and growth_w >= 0.50:
+            macro_fit_score += 20
+
+    macro_fit_score = max(50, min(98, macro_fit_score))
+
+    # 2. 취약점 레드팀(Red-Team) 공격 시뮬레이션
+    vulnerabilities = []
+    if sim_cat_weights.get("🤖 테마 & 미래혁신", 0) + sim_cat_weights.get("🚀 퀀트 스윙 & 모멘텀", 0) > 35:
+        vulnerabilities.append({
+            "위협 시나리오": "글로벌 기술주 나스닥 -20% 급락 쇼크",
+            "취약점": "고변동성 테마 및 스윙 비중이 35%를 초과하여 포트폴리오 MDD 급증 위험",
+            "방어 처방": "고배당 인컴(SOL 배당다우존스) 또는 현금 버퍼를 최소 10% 이상 추가 확충 필요"
+        })
+    if sim_cat_weights.get("💵 안전 현금", 0) < 5:
+        vulnerabilities.append({
+            "위협 시나리오": "돌발 블랙스완 급락장 (VIX 35+ 돌파)",
+            "취약점": "가용 현금 버퍼가 5% 미만으로 하락장 저가 바겐세일 매수 기회 상실",
+            "방어 처방": "매월 입금액 중 최소 10%는 CMA 예수금 파킹으로 비상 탄약 유지"
+        })
+    if tax_diag.get('annual_dividend_tax_leakage', 0) > 50000:
+        vulnerabilities.append({
+            "위협 시나리오": "일반 과세 계좌의 배당소득세(15.4%) 누수",
+            "취약점": f"연간 약 {tax_diag['annual_dividend_tax_leakage']:,}원의 세금이 과세 계좌에서 새어나가 복리 감쇄",
+            "방어 처방": "신규 배당 자산은 ISA 및 연금저축펀드로 100% 집중 매수하여 비과세 극대화"
+        })
+    if not vulnerabilities:
+        vulnerabilities.append({
+            "위협 시나리오": "글로벌 복합 조정장",
+            "취약점": "특정 자산 쏠림이 없는 견고한 올웨더 밸런스 구조",
+            "방어 처방": "현재 설정된 목표 비중을 정기 적립으로 일관되게 고수하십시오."
+        })
+
+    # 3. 30일 / 90일 주차별 분할 매수 실행 로드맵
+    monthly_deposit_sim = 1000000 # 100만원 기준
+    roadmap = [
+        {"주차": "1주차 (즉시)", "실행 과업": "연금저축 코어 지수(S&P500) 40% 분할 매수", "배정금액": f"{int(monthly_deposit_sim * 0.4):,}원"},
+        {"주차": "2주차", "실행 과업": "ISA 계좌 고배당(미국배당다우존스) 35% 분할 매수", "배정금액": f"{int(monthly_deposit_sim * 0.35):,}원"},
+        {"주차": "3주차", "실행 과업": "해외 정배열 주도주 눌림목 또는 테마 15% 진입", "배정금액": f"{int(monthly_deposit_sim * 0.15):,}원"},
+        {"주차": "4주차 (월말)", "실행 과업": "비상 현금(CMA) 10% 잔류 파킹 및 배당금 재투자", "배정금액": f"{int(monthly_deposit_sim * 0.1):,}원"}
+    ]
+
+    h_score = quant_metrics.get('health_score', 80)
+    approval_status = "🟢 APPROVED (만장일치 승인)" if (macro_fit_score >= 75 and h_score >= 70) else "🟡 CONDITIONAL (조건부 승인)"
+    committee_stamp = "Wall Street Quant Investment Committee Certified"
+    summary_verdict = (
+        f"본 자산 배분 모델은 기대수익률 +{quant_metrics['expected_cagr']*100:.1f}%, 샤프지수 {quant_metrics['sharpe_ratio']:.2f}, "
+        f"연간 배당수익률 {quant_metrics['dividend_yield']*100:.2f}%(연 {int(quant_metrics['annual_dividend_krw']):,}원)를 달성하도록 정밀 설계되었습니다. "
+        f"거시 국면 적합도 {macro_fit_score}점으로 실전 운용에 매우 적합합니다."
+    )
+    red_team_text = "\n\n".join([f"⚠️ **[{v['위협 시나리오']}]**\n- **취약점**: {v['취약점']}\n- **방어 처방**: {v['방어 처방']}" for v in vulnerabilities])
+    roadmap_text = "\n".join([f"- **{r['주차']}**: {r['실행 과업']} (추천 배정: {r['배정금액']})" for r in roadmap])
+
+    return {
+        "approval_status": approval_status,
+        "committee_stamp": committee_stamp,
+        "summary_verdict": summary_verdict,
+        "red_team_analysis": red_team_text,
+        "action_roadmap": roadmap_text,
+        "macro_fit_score": macro_fit_score,
+        "quant_metrics": quant_metrics,
+        "vulnerabilities": vulnerabilities,
+        "roadmap": roadmap,
+        "tax_diag": tax_diag
+    }
+
 
