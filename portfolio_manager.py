@@ -121,8 +121,8 @@ def classify_asset_category(ticker: str, name: str) -> str:
         return "💰 고배당 & 인컴"
         
     # 글로벌 코어 지수
-    if any(k in name_u for k in ["S&P500", "S&P 500", "나스닥100", "NASDAQ", "200", "KOSPI200"]) or ticker_u in [
-        "360750.KS", "368590.KS", "102110.KS", "SPY", "QQQ", "VOO", "IVV"
+    if any(k in name_u for k in ["S&P500", "S&P 500", "나스닥100", "NASDAQ", "200", "KOSPI200", "IRP"]) or ticker_u in [
+        "360750.KS", "368590.KS", "102110.KS", "SPY", "QQQ", "VOO", "IVV", "IRP"
     ]:
         return "🌱 글로벌 코어 지수"
 
@@ -281,8 +281,8 @@ def analyze_my_portfolio(portfolio_data: dict) -> dict:
             if live_p <= 0:
                 live_p = avg_p  # 시세 미제공 시 매수가 대체
 
-            # 6대 자산 팩터 카테고리 분류
-            asset_cat = classify_asset_category(tk, name)
+            # 6대 자산 팩터 카테고리 분류 (사용자 수동 지정값 우선, 미지정 시 자동 분류)
+            asset_cat = h.get("asset_category") or classify_asset_category(tk, name)
 
             # 금액 계산 (원화 환산)
             if is_usd_account:

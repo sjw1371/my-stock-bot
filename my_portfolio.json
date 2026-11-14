@@ -187,7 +187,8 @@
           "shares": 1.0,
           "avg_price": 2969817,
           "dividend_yield": 0.0,
-          "target_weight": 0.05
+          "target_weight": 0.05,
+          "asset_category": "🌱 글로벌 코어 지수"
         }
       ],
       "net_deposit": 3100000
