@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 12508,
+      "cash_krw": 17188,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -11,7 +11,8 @@
           "shares": 126,
           "avg_price": 25500,
           "dividend_yield": 0.9,
-          "target_weight": 0.35
+          "target_weight": 0.35,
+          "asset_category": "🌱 글로벌 코어 지수"
         },
         {
           "ticker": "487230.KS",
@@ -19,7 +20,8 @@
           "shares": 178,
           "avg_price": 22607,
           "dividend_yield": 0.4,
-          "target_weight": 0.2
+          "target_weight": 0.2,
+          "asset_category": "🤖 테마 & 미래혁신"
         },
         {
           "ticker": "402970.KS",
@@ -27,7 +29,8 @@
           "shares": 195,
           "avg_price": 14224,
           "dividend_yield": 2.8,
-          "target_weight": 0.2
+          "target_weight": 0.2,
+          "asset_category": "💰 고배당 & 인컴"
         },
         {
           "ticker": "102110.KS",
@@ -35,7 +38,8 @@
           "shares": 20,
           "avg_price": 99059,
           "dividend_yield": 1.0,
-          "target_weight": 0.1
+          "target_weight": 0.1,
+          "asset_category": "🌱 글로벌 코어 지수"
         },
         {
           "ticker": "0053L0.KS",
@@ -43,7 +47,8 @@
           "shares": 279,
           "avg_price": 11618,
           "dividend_yield": 0.3,
-          "target_weight": 0.1
+          "target_weight": 0.1,
+          "asset_category": "🤖 테마 & 미래혁신"
         },
         {
           "ticker": "475720.KS",
@@ -51,14 +56,15 @@
           "shares": 40,
           "avg_price": 12174,
           "dividend_yield": 16.3,
-          "target_weight": 0.05
+          "target_weight": 0.05,
+          "asset_category": "🌱 글로벌 코어 지수"
         }
       ],
       "net_deposit": 15000000
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 41124,
+      "cash_krw": 43702,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -67,7 +73,8 @@
           "shares": 107,
           "avg_price": 13684,
           "dividend_yield": 2.8,
-          "target_weight": 0.4
+          "target_weight": 0.4,
+          "asset_category": "💰 고배당 & 인컴"
         },
         {
           "ticker": "360750.KS",
@@ -75,7 +82,8 @@
           "shares": 44,
           "avg_price": 24726,
           "dividend_yield": 0.9,
-          "target_weight": 0.3
+          "target_weight": 0.3,
+          "asset_category": "🌱 글로벌 코어 지수"
         },
         {
           "ticker": "0035T0.KS",
@@ -83,7 +91,8 @@
           "shares": 120,
           "avg_price": 20631,
           "dividend_yield": 0.5,
-          "target_weight": 0.3
+          "target_weight": 0.3,
+          "asset_category": "🤖 테마 & 미래혁신"
         }
       ],
       "net_deposit": 1400000
@@ -91,7 +100,7 @@
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
       "cash_krw": 0,
-      "cash_usd": 57.54,
+      "cash_usd": 1517.83,
       "holdings": [
         {
           "ticker": "FAST",
@@ -99,15 +108,8 @@
           "shares": 31.0,
           "avg_price": 51.26,
           "dividend_yield": 2.2,
-          "target_weight": 0.15
-        },
-        {
-          "ticker": "KO",
-          "name": "코카콜라 (KO)",
-          "shares": 15.0,
-          "avg_price": 88.69,
-          "dividend_yield": 3.1,
-          "target_weight": 0.15
+          "target_weight": 0.15,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         },
         {
           "ticker": "JNJ",
@@ -115,7 +117,8 @@
           "shares": 5.0,
           "avg_price": 267.05,
           "dividend_yield": 3.2,
-          "target_weight": 0.15
+          "target_weight": 0.15,
+          "asset_category": "💰 고배당 & 인컴"
         },
         {
           "ticker": "MUU",
@@ -123,7 +126,8 @@
           "shares": 4.08,
           "avg_price": 39.23,
           "dividend_yield": 0.0,
-          "target_weight": 0.05
+          "target_weight": 0.05,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         },
         {
           "ticker": "EXPD",
@@ -131,7 +135,8 @@
           "shares": 8.34,
           "avg_price": 192.31,
           "dividend_yield": 0.8,
-          "target_weight": 0.1
+          "target_weight": 0.1,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         },
         {
           "ticker": "SNDK",
@@ -139,7 +144,8 @@
           "shares": 1.5,
           "avg_price": 980.22,
           "dividend_yield": 0.0,
-          "target_weight": 0.1
+          "target_weight": 0.1,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         }
       ],
       "net_deposit": 11000000
@@ -179,13 +185,14 @@
           "shares": 0.00022697,
           "avg_price": 115230000,
           "dividend_yield": 0.0,
-          "target_weight": 0.01
+          "target_weight": 0.01,
+          "asset_category": "🪙 대체자산 (코인)"
         },
         {
           "ticker": "IRP",
           "name": "IRP",
           "shares": 1.0,
-          "avg_price": 2969817,
+          "avg_price": 2958279,
           "dividend_yield": 0.0,
           "target_weight": 0.05,
           "asset_category": "🌱 글로벌 코어 지수"
@@ -302,6 +309,12 @@
       "equity": 38275087.0,
       "cost": 37500000.0,
       "return_pct": 2.07
+    },
+    {
+      "date": "2026-11-19",
+      "equity": 37260764.0,
+      "cost": 37500000.0,
+      "return_pct": -0.64
     }
   ]
 }
