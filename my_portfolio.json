@@ -100,17 +100,8 @@
     "일반계좌(해외)": {
       "type": "단기퀀트스윙",
       "cash_krw": 0,
-      "cash_usd": 1517.83,
+      "cash_usd": 2416.1,
       "holdings": [
-        {
-          "ticker": "FAST",
-          "name": "패스널 (FAST)",
-          "shares": 31.0,
-          "avg_price": 51.26,
-          "dividend_yield": 2.2,
-          "target_weight": 0.15,
-          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
-        },
         {
           "ticker": "JNJ",
           "name": "존슨앤존슨 (JNJ)",
@@ -141,8 +132,8 @@
         {
           "ticker": "SNDK",
           "name": "샌디스크",
-          "shares": 1.5,
-          "avg_price": 980.22,
+          "shares": 2.5,
+          "avg_price": 894.84,
           "dividend_yield": 0.0,
           "target_weight": 0.1,
           "asset_category": "🚀 퀀트 스윙 & 모멘텀"
