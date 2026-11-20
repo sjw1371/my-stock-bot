@@ -2,7 +2,7 @@
   "accounts": {
     "연금저축펀드": {
       "type": "장기적립",
-      "cash_krw": 17188,
+      "cash_krw": 3683,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -17,8 +17,8 @@
         {
           "ticker": "487230.KS",
           "name": "KODEX 미국AI전력핵심인프라",
-          "shares": 178,
-          "avg_price": 22607,
+          "shares": 179,
+          "avg_price": 22556,
           "dividend_yield": 0.4,
           "target_weight": 0.2,
           "asset_category": "🤖 테마 & 미래혁신"
@@ -64,7 +64,7 @@
     },
     "일반계좌(국내)": {
       "type": "단기/배당",
-      "cash_krw": 43702,
+      "cash_krw": 1710,
       "cash_usd": 0.0,
       "holdings": [
         {
@@ -132,8 +132,8 @@
         {
           "ticker": "SNDK",
           "name": "샌디스크",
-          "shares": 2.5,
-          "avg_price": 894.84,
+          "shares": 20.0,
+          "avg_price": 111.85,
           "dividend_yield": 0.0,
           "target_weight": 0.1,
           "asset_category": "🚀 퀀트 스윙 & 모멘텀"
@@ -143,16 +143,17 @@
     },
     "ISA": {
       "type": "장기적립",
-      "cash_krw": 10566,
+      "cash_krw": 557,
       "cash_usd": 0.0,
       "holdings": [
         {
           "ticker": "368590.KS",
           "name": "RISE 미국나스닥100",
-          "shares": 146,
-          "avg_price": 30334,
+          "shares": 148,
+          "avg_price": 30276,
           "dividend_yield": 0.5,
-          "target_weight": 0.6
+          "target_weight": 0.6,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         },
         {
           "ticker": "446720.KS",
@@ -160,10 +161,11 @@
           "shares": 197,
           "avg_price": 13805,
           "dividend_yield": 3.0,
-          "target_weight": 0.4
+          "target_weight": 0.4,
+          "asset_category": "🚀 퀀트 스윙 & 모멘텀"
         }
       ],
-      "net_deposit": 7000000
+      "net_deposit": 7132000
     },
     "IRP및코인": {
       "type": "자산배분",
@@ -306,6 +308,12 @@
       "equity": 37260764.0,
       "cost": 37500000.0,
       "return_pct": -0.64
+    },
+    {
+      "date": "2026-11-21",
+      "equity": 35728495.0,
+      "cost": 37632000.0,
+      "return_pct": -5.06
     }
   ]
 }
