@@ -51,14 +51,14 @@ FACTOR_PROFILES = {
         "tax_reason": "장기 복리 해외 지수 ETF는 매매차익 및 배당소득 과세이연 혜택 극대화"
     },
     "💰 고배당 & 인컴": {
-        "expected_cagr": 0.085,   # 8.5%
-        "volatility": 0.120,      # 12.0%
-        "dividend_yield": 0.042,  # 4.2%
-        "crisis_2008": -0.26,
-        "crisis_2020": -0.22,
-        "crisis_2022": -0.10,
+        "expected_cagr": 0.088,   # 8.8% (고배당주 + 미국 30년 국채 혼합)
+        "volatility": 0.115,      # 11.5% (채권 편입으로 변동성 축소)
+        "dividend_yield": 0.045,  # 4.5% (배당주 배당금 + 국채 월분배금)
+        "crisis_2008": -0.18,     # 국채 편입 시 주식 폭락기 쿠션 방어
+        "crisis_2020": -0.16,
+        "crisis_2022": -0.12,
         "best_account": "ISA / 연금저축 (배당세 15.4% 비과세/이연)",
-        "tax_reason": "고배당 인컴 자산은 금융소득종합과세 회피 및 15.4% 배당소득세 절세 필수"
+        "tax_reason": "고배당 인컴 및 미국 30년 국채 월분배는 15.4% 배당소득세 비과세/과세이연 혜택 필수"
     },
     "🤖 테마 & 미래혁신": {
         "expected_cagr": 0.145,   # 14.5%
@@ -114,9 +114,9 @@ def classify_asset_category(ticker: str, name: str) -> str:
     if "현금" in name_u or "CASH" in name_u:
         return "💵 안전 현금"
         
-    # 배당 및 인컴
-    if any(k in name_u for k in ["배당", "커버드콜", "인컴", "리츠", "인프라", "위클리"]) or ticker_u in [
-        "KO", "JNJ", "FAST", "AES", "SCHD", "JEPI", "O", "MO", "402970.KS", "446720.KS", "475720.KS"
+    # 배당 및 인컴 (고배당주 및 미국 30년 국채/월배당 채권형 ETF)
+    if any(k in name_u for k in ["배당", "커버드콜", "인컴", "리츠", "인프라", "위클리", "국채", "채권", "30년", "SOFR", "금리"]) or ticker_u in [
+        "KO", "JNJ", "FAST", "AES", "SCHD", "JEPI", "O", "MO", "402970.KS", "446720.KS", "475720.KS", "453850.KS", "TLT", "IEF", "SGOV"
     ]:
         return "💰 고배당 & 인컴"
         

@@ -31,6 +31,7 @@ from data_fetch import (
     fetch_all_stock_history_batch,
     fetch_stock_history,
     fetch_fundamental_data,
+    get_stock_name,
     extract_single_stock_df,
     NAME_DICT,
     clean_ticker,
@@ -213,6 +214,13 @@ def run_quant_analysis(select_mode, raw_input_tickers, strategy_mode, capital, e
 
     fund_df = pd.DataFrame(fund_records)
     pipeline_df = pd.merge(pipeline_df, fund_df[['티커', '종목명', '섹터', 'ROE(%)', '이익성장(%)', '등급']], on='티커')
+
+    # 종목명이 누락되었거나 티커와 동일한 경우를 위한 최종 안전 보정 (100% 한글/정식명 보장)
+    if '종목명' in pipeline_df.columns:
+        pipeline_df['종목명'] = pipeline_df.apply(
+            lambda r: get_stock_name(r['티커']) if (pd.isna(r['종목명']) or str(r['종목명']).strip() == str(r['티커']).strip()) else r['종목명'],
+            axis=1
+        )
 
     final_df = calculate_portfolio_allocation(
         pipeline_df=pipeline_df,

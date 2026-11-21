@@ -11,7 +11,7 @@
           "shares": 126,
           "avg_price": 25500,
           "dividend_yield": 0.9,
-          "target_weight": 0.35,
+          "target_weight": 0.3,
           "asset_category": "🌱 글로벌 코어 지수"
         },
         {
@@ -20,7 +20,7 @@
           "shares": 179,
           "avg_price": 22556,
           "dividend_yield": 0.4,
-          "target_weight": 0.2,
+          "target_weight": 0.15,
           "asset_category": "🤖 테마 & 미래혁신"
         },
         {
@@ -58,6 +58,15 @@
           "dividend_yield": 16.3,
           "target_weight": 0.05,
           "asset_category": "🌱 글로벌 코어 지수"
+        },
+        {
+          "ticker": "453850.KS",
+          "name": "ACE 미국30년국채액티브(H)",
+          "shares": 0,
+          "avg_price": 8600,
+          "dividend_yield": 4.2,
+          "target_weight": 0.1,
+          "asset_category": "💰 고배당 & 인컴"
         }
       ],
       "net_deposit": 15000000
@@ -152,7 +161,7 @@
           "shares": 148,
           "avg_price": 30276,
           "dividend_yield": 0.5,
-          "target_weight": 0.6,
+          "target_weight": 0.5,
           "asset_category": "🌱 글로벌 코어 지수"
         },
         {
@@ -161,7 +170,16 @@
           "shares": 197,
           "avg_price": 13805,
           "dividend_yield": 3.0,
-          "target_weight": 0.4,
+          "target_weight": 0.35,
+          "asset_category": "💰 고배당 & 인컴"
+        },
+        {
+          "ticker": "453850.KS",
+          "name": "ACE 미국30년국채액티브(H)",
+          "shares": 0,
+          "avg_price": 8600,
+          "dividend_yield": 4.2,
+          "target_weight": 0.15,
           "asset_category": "💰 고배당 & 인컴"
         }
       ],

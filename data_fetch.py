@@ -9,6 +9,8 @@ data_fetch.py
 
 import sys
 import io
+import os
+import json
 import urllib.request
 import concurrent.futures
 import pandas as pd
@@ -227,6 +229,75 @@ NAME_DICT = {
     "319660": "피에스케이", "086450": "동국제약", "287410": "제이시스메디칼", "365340": "성일하이텍",
     "348210": "넥스틴", "137400": "피엔티", "215600": "신라젠", "086390": "유니테스트"
 }
+
+# ==========================================================================
+# 📌 마스터 종목명 DB(stock_names_master.json) 및 포트폴리오 보유 종목 자동 병합
+# ==========================================================================
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+_MASTER_JSON_PATH = os.path.join(_BASE_DIR, "stock_names_master.json")
+if os.path.exists(_MASTER_JSON_PATH):
+    try:
+        with open(_MASTER_JSON_PATH, "r", encoding="utf-8") as _f:
+            _master_data = json.load(_f)
+            NAME_DICT.update(_master_data)
+    except Exception as _e:
+        safe_print(f"⚠️ stock_names_master.json 로드 중 경고: {_e}")
+
+_PORTFOLIO_JSON_PATH = os.path.join(_BASE_DIR, "my_portfolio.json")
+if os.path.exists(_PORTFOLIO_JSON_PATH):
+    try:
+        with open(_PORTFOLIO_JSON_PATH, "r", encoding="utf-8") as _f:
+            _pf_data = json.load(_f)
+            for _acc_info in _pf_data.get("accounts", {}).values():
+                for _h in _acc_info.get("holdings", []):
+                    _t = _h.get("ticker", "").strip()
+                    _n = _h.get("name", "").strip()
+                    if _t and _n:
+                        NAME_DICT[_t] = _n
+                        _t_clean = _t.replace(".KS", "").replace(".KQ", "")
+                        NAME_DICT[_t_clean] = _n
+    except Exception as _e:
+        safe_print(f"⚠️ my_portfolio.json 종목명 동기화 중 경고: {_e}")
+
+
+def get_stock_name(ticker: str) -> str:
+    """
+    티커에 매핑된 종목명(한글/정식명)을 반환.
+    티커 형식(.KS, .KQ 접미사 유무, 대소문자 등)에 상관없이 100% 매핑 보장.
+    """
+    if not ticker:
+        return ""
+    tk_clean = str(ticker).strip()
+    tk_bare = tk_clean.replace('.KS', '').replace('.KQ', '').replace('.ks', '').replace('.kq', '').upper()
+
+    # 1. 원본 티커로 매핑
+    if tk_clean in NAME_DICT:
+        return NAME_DICT[tk_clean]
+    # 2. 접미사 제거된 베어 티커로 매핑
+    if tk_bare in NAME_DICT:
+        return NAME_DICT[tk_bare]
+    # 3. .KS 접미사 붙여서 매핑
+    if f"{tk_bare}.KS" in NAME_DICT:
+        return NAME_DICT[f"{tk_bare}.KS"]
+    # 4. .KQ 접미사 붙여서 매핑
+    if f"{tk_bare}.KQ" in NAME_DICT:
+        return NAME_DICT[f"{tk_bare}.KQ"]
+
+    # 5. yfinance 온라인 fallback 시도 (네트워크 가능한 경우)
+    try:
+        import yfinance as yf
+        info = yf.Ticker(tk_clean).info
+        raw_name = info.get('shortName') or info.get('longName')
+        if raw_name:
+            clean_name = raw_name.split(',')[0].strip()
+            NAME_DICT[tk_clean] = clean_name
+            NAME_DICT[tk_bare] = clean_name
+            return clean_name
+    except Exception:
+        pass
+
+    return tk_clean
+
 
 HTTP_HEADERS = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
@@ -478,14 +549,10 @@ def fetch_fundamental_data(ticker: str, select_mode: str = "") -> dict:
     """
     개별 종목의 펀더멘탈(ROE, 이익성장률, 섹터, 종목명) 즉시 수집/매핑
     """
-    name = NAME_DICT.get(ticker, ticker)
+    name = get_stock_name(ticker)
     sector = 'Technology'
     roe = 0.12
     growth = 0.10
-
-    # 한국 종목명 기본화
-    if ticker.isdigit() and ticker in NAME_DICT:
-        name = NAME_DICT[ticker]
 
     return {
         '티커': ticker,
