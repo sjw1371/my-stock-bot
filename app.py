@@ -515,68 +515,233 @@ with tab_my_account:
                     st.warning("붙여넣은 텍스트가 없습니다.")
 
         with sync_col2:
-            st.markdown("⚡ **고속 폼 모드**: 입력 중에는 불필요한 새로고침 렉이 발생하지 않으며, 아래 **[💾 영구 저장]** 버튼을 누르면 즉시 초고속으로 저장됩니다.")
-            edit_acc = st.selectbox("수정할 계좌 선택", list(raw_p_data.get("accounts", {}).keys()), key="select_edit_acc")
-            if edit_acc:
-                target_acc_info = raw_p_data["accounts"][edit_acc]
-                
-                # st.form으로 감싸서 입력 시 Streamlit 전체 리런 지연을 100% 차단 (초고속 입력)
-                with st.form(key=f"fast_edit_form_{edit_acc}"):
-                    e_c1, e_c2, e_c3 = st.columns([1.4, 1.0, 1.0])
-                    with e_c1:
-                        curr_net_dep = int(target_acc_info.get("net_deposit", 0))
-                        new_net_deposit = st.number_input(
-                            f"💰 {edit_acc} 순투입원금 (원)",
-                            value=curr_net_dep,
-                            step=100000,
-                            help="은행 통장에서 이 계좌로 실제 입금한 총액 - 출금액 (진짜 원금). 0으로 두시면 보유주식 매수가+현금으로 자동 추적됩니다."
-                        )
-                    with e_c2:
-                        new_cash_krw = st.number_input(f"💵 원화 현금 잔고 (KRW)", value=int(target_acc_info.get("cash_krw", 0)), step=10000)
-                    with e_c3:
-                        new_cash_usd = st.number_input(f"💲 달러 현금 잔고 (USD)", value=float(target_acc_info.get("cash_usd", 0.0)), step=10.0)
+            st.markdown("⚡ **계좌별 고속 편집 & 통합 비중 조율**: 계좌별 탭에서 개별 종목을 편집하고, 전체 포트폴리오 비중을 한눈에 점검 및 조율할 수 있습니다.")
 
-                    st.markdown("**보유 종목 목록 편집 (수량, 매수단가, 배당수익률, 목표비중, 자산분류)**")
-                    holdings_list = target_acc_info.get("holdings", [])
-                    h_df = pd.DataFrame(holdings_list)
-                    if not h_df.empty:
-                        if 'dividend_yield' not in h_df.columns:
-                            h_df['dividend_yield'] = 0.0
-                        if 'target_weight' not in h_df.columns:
-                            h_df['target_weight'] = 0.10
-                        if 'asset_category' not in h_df.columns:
-                            h_df['asset_category'] = "🌱 글로벌 코어 지수" if "연금" in edit_acc else "🚀 퀀트 스윙 & 모멘텀"
-                    else:
-                        h_df = pd.DataFrame(columns=["ticker", "name", "shares", "avg_price", "dividend_yield", "target_weight", "asset_category"])
+            # ------------------------------------------------------------------
+            # 📊 전체 포트폴리오 자산배분 현황 요약 (상단 고정 패널)
+            # ------------------------------------------------------------------
+            cat_comparison = my_analysis.get('category_comparison', [])
+            total_net_worth = float(my_analysis.get('total_net_worth', 0.0))
+            if cat_comparison:
+                with st.expander("📊 [전체 포트폴리오] 6대 자산 팩터 배분 현황 & 리밸런싱 가이드", expanded=True):
+                    summary_rows = []
+                    for c in cat_comparison:
+                        cat_name = c.get('category', '')
+                        curr_w = c.get('current_weight', 0.0)
+                        tgt_w  = c.get('target_weight', 0.0)
+                        gap    = curr_w - tgt_w
+                        eval_krw = my_analysis.get('categories_data', {}).get(cat_name, {}).get('eval_krw', 0.0)
+                        status_str = "✅ 적정" if abs(gap) <= 3.0 else ("🔺 초과 (비중축소 권고)" if gap > 0 else "🔻 부족 (비중확대 권고)")
+                        summary_rows.append({
+                            "자산 팩터": cat_name,
+                            "평가액(만원)": f"{eval_krw/10000:,.0f}만",
+                            "현재 비중": f"{curr_w:.1f}%",
+                            "목표 비중": f"{tgt_w:.1f}%",
+                            "괴리율(차이)": f"{gap:+.1f}%",
+                            "리밸런싱 상태": status_str,
+                        })
+                    st.dataframe(pd.DataFrame(summary_rows), use_container_width=True, hide_index=True)
+                    st.caption("💡 각 계좌에 흩어져 있는 종목들의 팩터 비중 합계입니다. 아래 계좌별 탭에서 각 종목의 비중을 조절하여 전체 목표치에 맞춰보세요.")
 
-                    edited_h_df = st.data_editor(
-                        h_df,
-                        key=f"editor_holdings_{edit_acc}",
-                        num_rows="dynamic",
-                        use_container_width=True,
-                        column_config={
-                            "ticker": st.column_config.TextColumn("티커 (종목코드)", width="small", required=True),
-                            "name": st.column_config.TextColumn("종목명", width="medium", required=True),
-                            "shares": st.column_config.NumberColumn("보유수량", width="small", required=True, min_value=0.0),
-                            "avg_price": st.column_config.NumberColumn("매수단가 (KRW/USD)", width="small", required=True, min_value=0.0),
-                            "dividend_yield": st.column_config.NumberColumn("배당수익률 (%)", width="small", min_value=0.0, max_value=100.0, step=0.1, format="%.2f%%"),
-                            "target_weight": st.column_config.NumberColumn("목표비중 (0~1)", width="small", min_value=0.0, max_value=1.0, step=0.05, format="%.2f"),
-                            "asset_category": st.column_config.SelectboxColumn("자산 팩터 분류", options=[
-                                "🌱 글로벌 코어 지수", "💰 고배당 & 인컴", "🤖 테마 & 미래혁신", "🚀 퀀트 스윙 & 모멘텀", "🪙 대체자산 (코인)", "💵 안전 현금"
-                            ], width="medium")
+            # ------------------------------------------------------------------
+            # 📑 계좌별 탭 구성 (기존 탭 유지 + 전체 통합 점검 탭)
+            # ------------------------------------------------------------------
+            acc_keys = list(raw_p_data.get("accounts", {}).keys())
+            tab_labels = ["🌐 전 계좌 종목 통합 점검"] + [f"💼 {acc}" for acc in acc_keys]
+            acc_tabs = st.tabs(tab_labels)
+
+            _ASSET_CATEGORY_OPTIONS = [
+                "🌱 글로벌 코어 지수", "💰 고배당 & 인컴", "🤖 테마 & 미래혁신",
+                "🚀 퀀트 스윙 & 모멘텀", "🪙 대체자산 (코인)", "💵 안전 현금"
+            ]
+            _ex_rate = float(my_analysis.get('exchange_rate', 1350.0))
+
+            # --- [탭 1] 전 계좌 종목 통합 점검 ---
+            with acc_tabs[0]:
+                st.markdown("#### 🌐 전 계좌 보유 종목 통합 현황 및 전체 비중 점검")
+                st.caption("모든 계좌에 분산된 보유 종목들의 실시간 평가액과 **전체 포트폴리오(순자산) 대비 비중**을 비교 분석합니다.")
+
+                all_items_data = []
+                for acc_name, target_acc_info in raw_p_data.get("accounts", {}).items():
+                    acc_eval_info = my_analysis.get('accounts', {}).get(acc_name, {})
+                    acc_total_eval_krw = float(acc_eval_info.get('total_eval_krw', 0.0))
+                    acc_holdings_eval_map = {
+                        h_item.get('티커'): float(h_item.get('평가금액(원)', 0.0))
+                        for h_item in acc_eval_info.get('holdings', [])
+                    }
+                    is_usd_acc = ("해외" in acc_name)
+
+                    for h in target_acc_info.get("holdings", []):
+                        tk = str(h.get('ticker', '')).strip()
+                        nm = str(h.get('name', tk))
+                        sh = float(h.get('shares', 0.0))
+                        ap = float(h.get('avg_price', 0.0))
+                        cat = h.get('asset_category', '기타')
+                        tgt_w = float(h.get('target_weight', 0.0))
+
+                        if tk in acc_holdings_eval_map:
+                            h_eval = acc_holdings_eval_map[tk]
+                        else:
+                            h_eval = sh * ap * (_ex_rate if is_usd_acc else 1.0)
+
+                        acc_w_pct = (h_eval / acc_total_eval_krw * 100.0) if acc_total_eval_krw > 0 else 0.0
+                        total_w_pct = (h_eval / total_net_worth * 100.0) if total_net_worth > 0 else 0.0
+
+                        all_items_data.append({
+                            "계좌": acc_name,
+                            "종목명": nm,
+                            "티커": tk,
+                            "자산 팩터": cat,
+                            "보유수량": sh,
+                            "평가금액(만원)": round(h_eval / 10000.0, 1),
+                            "계좌 내 현재비중": f"{acc_w_pct:.1f}%",
+                            "계좌 내 목표비중": f"{tgt_w*100:.1f}%",
+                            "전체 포트폴리오 비중": f"{total_w_pct:.1f}%",
+                        })
+
+                if all_items_data:
+                    df_all_overview = pd.DataFrame(all_items_data)
+                    st.dataframe(df_all_overview, use_container_width=True, hide_index=True)
+                else:
+                    st.info("등록된 보유 종목이 없습니다.")
+
+            # --- [탭 2 ~ N] 각 계좌별 탭 (기존 계좌별 탭 유지 및 비중 열 강화) ---
+            for tab_idx, acc_name in enumerate(acc_keys):
+                with acc_tabs[tab_idx + 1]:
+                    target_acc_info = raw_p_data["accounts"][acc_name]
+                    acc_type = target_acc_info.get("type", "")
+                    
+                    st.markdown(f"#### 💼 {acc_name} ({acc_type})")
+
+                    with st.form(key=f"fast_edit_form_{acc_name}"):
+                        e_c1, e_c2, e_c3 = st.columns([1.4, 1.0, 1.0])
+                        with e_c1:
+                            curr_net_dep = int(target_acc_info.get("net_deposit", 0))
+                            new_net_deposit = st.number_input(
+                                f"💰 순투입원금 (원)",
+                                value=curr_net_dep,
+                                step=100000,
+                                key=f"net_dep_{acc_name}",
+                                help="은행 통장에서 이 계좌로 실제 입금한 총액 - 출금액 (진짜 원금). 0으로 두시면 보유주식 매수가+현금으로 자동 추적됩니다."
+                            )
+                        with e_c2:
+                            new_cash_krw = st.number_input(
+                                f"💵 원화 현금 잔고 (KRW)",
+                                value=int(target_acc_info.get("cash_krw", 0)),
+                                step=10000,
+                                key=f"cash_krw_{acc_name}"
+                            )
+                        with e_c3:
+                            new_cash_usd = st.number_input(
+                                f"💲 달러 현금 잔고 (USD)",
+                                value=float(target_acc_info.get("cash_usd", 0.0)),
+                                step=10.0,
+                                key=f"cash_usd_{acc_name}"
+                            )
+
+                        st.markdown("**보유 종목 목록 편집 (수량, 매수단가, 현재비중, 목표비중, 배당수익률, 자산분류)**")
+
+                        # 계좌별 실시간 평가금액 조회
+                        acc_eval_info = my_analysis.get('accounts', {}).get(acc_name, {})
+                        acc_total_eval_krw = float(acc_eval_info.get('total_eval_krw', 0.0))
+                        acc_holdings_eval_map = {
+                            h_item.get('티커'): float(h_item.get('평가금액(원)', 0.0))
+                            for h_item in acc_eval_info.get('holdings', [])
                         }
-                    )
+                        is_usd_acc = ("해외" in acc_name)
 
-                    save_submitted = st.form_submit_button(f"💾 {edit_acc} 수정 내용 1초 만에 영구 저장하기", type="primary", use_container_width=True)
-                    if save_submitted:
-                        target_acc_info["net_deposit"] = new_net_deposit
-                        target_acc_info["cash_krw"] = new_cash_krw
-                        target_acc_info["cash_usd"] = new_cash_usd
-                        target_acc_info["holdings"] = edited_h_df.to_dict(orient="records")
-                        raw_p_data["accounts"][edit_acc] = target_acc_info
-                        save_portfolio_data(raw_p_data)
-                        st.success(f"🎉 {edit_acc} 데이터가 초고속으로 영구 저장되었습니다!")
-                        st.rerun()
+                        holdings_list = target_acc_info.get("holdings", [])
+                        h_df = pd.DataFrame(holdings_list)
+                        if not h_df.empty:
+                            if 'dividend_yield' not in h_df.columns:
+                                h_df['dividend_yield'] = 0.0
+                            if 'target_weight' not in h_df.columns:
+                                h_df['target_weight'] = 0.10
+                            if 'asset_category' not in h_df.columns:
+                                h_df['asset_category'] = "🌱 글로벌 코어 지수" if "연금" in acc_name else "🚀 퀀트 스윙 & 모멘텀"
+
+                            # 📊 실시간 평가금액 기반 '계좌 내 현재비중(%)' 및 '전체 포트폴리오 비중(%)' 계산
+                            curr_weights = []
+                            total_weights = []
+                            for _, row in h_df.iterrows():
+                                tk = str(row.get('ticker', '')).strip()
+                                sh = float(row.get('shares', 0.0)) if pd.notna(row.get('shares')) else 0.0
+                                ap = float(row.get('avg_price', 0.0)) if pd.notna(row.get('avg_price')) else 0.0
+                                if tk in acc_holdings_eval_map:
+                                    h_eval = acc_holdings_eval_map[tk]
+                                else:
+                                    h_eval = sh * ap * (_ex_rate if is_usd_acc else 1.0)
+                                w_pct = (h_eval / acc_total_eval_krw * 100.0) if acc_total_eval_krw > 0 else 0.0
+                                tot_w_pct = (h_eval / total_net_worth * 100.0) if total_net_worth > 0 else 0.0
+                                curr_weights.append(round(w_pct, 1))
+                                total_weights.append(round(tot_w_pct, 1))
+
+                            h_df['curr_weight_pct'] = curr_weights
+                            h_df['total_weight_pct'] = total_weights
+
+                            # 컬럼 순서 재배치
+                            desired_cols = ["ticker", "name", "shares", "avg_price", "curr_weight_pct", "total_weight_pct", "target_weight", "dividend_yield", "asset_category"]
+                            existing_cols = [c for c in desired_cols if c in h_df.columns]
+                            remaining_cols = [c for c in h_df.columns if c not in desired_cols]
+                            h_df = h_df[existing_cols + remaining_cols]
+                        else:
+                            h_df = pd.DataFrame(columns=["ticker", "name", "shares", "avg_price", "curr_weight_pct", "total_weight_pct", "target_weight", "dividend_yield", "asset_category"])
+
+                        # 목표비중 합계 검증
+                        target_sum = float(h_df['target_weight'].sum()) if ('target_weight' in h_df.columns and not h_df.empty) else 0.0
+                        status_icon = "✅ 적정" if abs(target_sum - 1.0) <= 0.01 else ("⚠️ 100% 미달" if target_sum < 1.0 else "⚠️ 100% 초과")
+                        st.caption(f"💡 **현재비중(%)**은 계좌 내 실시간 비중, **전체비중(%)**은 전체 자산 대비 비중입니다. **목표비중(0~1)** 합계: **{target_sum*100:.1f}%** | {status_icon}")
+
+                        edited_h_df = st.data_editor(
+                            h_df,
+                            key=f"editor_holdings_{acc_name}",
+                            num_rows="dynamic",
+                            use_container_width=True,
+                            column_config={
+                                "ticker": st.column_config.TextColumn("티커 (종목코드)", width="small", required=True),
+                                "name": st.column_config.TextColumn("종목명", width="medium", required=True),
+                                "shares": st.column_config.NumberColumn("보유수량", width="small", required=True, min_value=0.0),
+                                "avg_price": st.column_config.NumberColumn("매수단가 (KRW/USD)", width="small", required=True, min_value=0.0),
+                                "curr_weight_pct": st.column_config.NumberColumn("계좌비중 (%)", help="실시간 평가액 기준 계좌 내 현재 비중 (읽기 전용)", width="small", format="%.1f%%", disabled=True),
+                                "total_weight_pct": st.column_config.NumberColumn("전체비중 (%)", help="전체 포트폴리오 순자산 대비 현재 비중 (읽기 전용)", width="small", format="%.1f%%", disabled=True),
+                                "target_weight": st.column_config.NumberColumn("계좌 목표비중 (0~1)", help="리밸런싱 목표 비중 (예: 15%는 0.15 입력, 계좌 합계 1.0 권장)", width="small", min_value=0.0, max_value=1.0, step=0.05, format="%.2f"),
+                                "dividend_yield": st.column_config.NumberColumn("배당수익률 (%)", width="small", min_value=0.0, max_value=100.0, step=0.1, format="%.2f%%"),
+                                "asset_category": st.column_config.SelectboxColumn("자산 팩터 분류", options=_ASSET_CATEGORY_OPTIONS, width="medium")
+                            }
+                        )
+
+                        # 현재 vs 목표비중 차이 요약 (계좌 내)
+                        if not h_df.empty and 'curr_weight_pct' in h_df.columns and 'target_weight' in h_df.columns:
+                            diff_lines = []
+                            for _, row in h_df.iterrows():
+                                nm    = str(row.get('name', row.get('ticker', '')))
+                                curr  = float(row.get('curr_weight_pct', 0.0))
+                                tgt   = float(row.get('target_weight', 0.0)) * 100.0
+                                diff  = curr - tgt
+                                arrow = "🔺" if diff > 3.0 else ("🔻" if diff < -3.0 else "✅")
+                                diff_lines.append(f"{arrow} **{nm}**: 계좌 {curr:.1f}% → 목표 {tgt:.1f}% ({diff:+.1f}%)")
+                            st.caption("  |  ".join(diff_lines) if diff_lines else "")
+
+                        save_submitted = st.form_submit_button(
+                            f"💾 {acc_name} 저장하기",
+                            type="primary",
+                            use_container_width=True
+                        )
+                        if save_submitted:
+                            target_acc_info["net_deposit"] = new_net_deposit
+                            target_acc_info["cash_krw"] = new_cash_krw
+                            target_acc_info["cash_usd"] = new_cash_usd
+                            # 표시용 임시 컬럼 curr_weight_pct, total_weight_pct 제거 후 저장
+                            clean_holdings = []
+                            for rec in edited_h_df.to_dict(orient="records"):
+                                rec.pop("curr_weight_pct", None)
+                                rec.pop("total_weight_pct", None)
+                                clean_holdings.append(rec)
+                            target_acc_info["holdings"] = clean_holdings
+                            raw_p_data["accounts"][acc_name] = target_acc_info
+                            save_portfolio_data(raw_p_data)
+                            st.success(f"🎉 {acc_name} 데이터가 초고속으로 영구 저장되었습니다!")
+                            st.rerun()
 
         with sync_col3:
             st.markdown("### 📸 오늘 자산 & 원금 스냅샷 기록하기")
